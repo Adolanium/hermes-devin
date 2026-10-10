@@ -1,322 +1,183 @@
-# hermes-devin
+<div align="center">
 
-A Hermes Agent plugin that lets Hermes hand coding tasks to the local
-[Devin CLI](https://cli.devin.ai).
+  <a href="https://github.com/NousResearch/hermes-agent">
+    <img src="https://github.com/user-attachments/assets/ac2f5702-c842-4b2e-9340-737481fa0ece" width="96" height="96" alt="Nous Research Hermes mark" />
+  </a>
 
-- **Your approval comes first.** Every run goes through Hermes' approval prompt
-  (CLI, gateway buttons or Desktop dialog). If nobody is there to answer, the run
-  does not start.
-- **The permission mode is yours to set.** Devin's permission mode comes only
-  from the plugin settings. The model cannot pass or change it, and `dangerous`
-  needs an explicit `allow_dangerous: true`.
-- **You see live progress.** Devin is driven over ACP (Agent Client Protocol),
-  so Hermes gets structured events: messages, tool calls, the plan, usage and
-  permission prompts.
-- **Background runs.** Long tasks return a run id right away. The result is
-  posted back to the conversation when Devin finishes, and a concurrency limit
-  applies.
-- **Clean stops.** An interrupt, a timeout, a cancel, unloading the plugin or
-  quitting Hermes kills Devin's whole process tree. On Windows this uses a Job
-  Object, falling back to `taskkill /T /F`. On POSIX it signals the process
-  group. You are told how the stop went.
+  # Hermes Devin
 
-## Requirements
+  **Hand the coding task to Devin. Keep your hand on the switch.**
 
-- Hermes Agent with the plugin API v1 (`api_version: 1`).
-- The Devin CLI, installed and logged in:
-  - Windows (PowerShell): `irm https://static.devin.ai/cli/setup.ps1 | iex`
-  - macOS / Linux: `curl -fsSL https://cli.devin.ai/install.sh | bash`
-  - Then run `devin auth login` once in a terminal. The plugin never logs in or
-    out for you.
+  Hermes Devin lets Hermes delegate a coding task to the Devin CLI on your machine.
+  You approve every run, you choose how much Devin may do on its own, and you can
+  stop it at any moment. Every process it started stops with it.
 
-There are no extra Python dependencies.
+  <sub>POWERED BY <a href="https://github.com/NousResearch/hermes-agent">HERMES AGENT</a> &nbsp;·&nbsp; COMMUNITY PLUGIN &nbsp;·&nbsp; VERSION 0.1.0</sub>
 
-## Install
+  <br /><br />
 
-Put the plugin directory under your Hermes home's `plugins/` folder. The
-default Hermes home is `%LOCALAPPDATA%\hermes` on Windows and `~/.hermes`
-elsewhere, or whatever `HERMES_HOME` points to.
+  [See what it does](#a-second-pair-of-hands-in-the-chat) &nbsp;·&nbsp; [Install it](#make-it-yours) &nbsp;·&nbsp; [Read the safety model](#you-stay-in-charge)
 
-Windows, from a checkout like `E:\Dev\Hermes\plugins\hermes-devin`, using a
-junction so edits take effect without copying:
+</div>
+
+## Powered by Hermes
+
+Hermes Devin is a community-built agent plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It adds tools to Hermes' own `delegation` toolset, asks through Hermes' own approval prompt, and posts results back into the same conversation. It works the same in the CLI, the TUI, Hermes Desktop and the messaging gateway.
+
+Devin runs locally through the [Devin CLI](https://cli.devin.ai) you already installed and logged in to. The plugin does not hold an API key and does not call Devin's cloud API.
+
+## A second pair of hands in the chat
+
+Ask Hermes to give a task to Devin and keep talking. Hermes writes the brief, you approve it, and Devin works in the folder you name.
+
+| | |
+| --- | --- |
+| **Delegate**<br />Hermes hands Devin a complete brief: goal, files, constraints, how to verify. You see the folder, the permission mode, the timeout and the task before anything starts. | **Watch**<br />Progress streams live: Devin's messages, the files it edits, its plan, token use and every permission decision. `/devin status` shows it at a glance. |
+| **Background it**<br />Long tasks return a run id right away. The result lands in the chat when Devin finishes. A concurrency limit keeps two or three runs from turning into twenty. | **Stop it**<br />Interrupt, cancel, a timeout, or quitting Hermes ends the run. Devin is asked to stop first, then its whole process tree is closed. You get a report of how it went. |
+
+An illustrative exchange:
+
+```text
+You     › Have Devin add type hints to src/utils.py in E:\Dev\myapp and run the tests.
+Hermes  › [approval] Start a Devin run in E:\Dev\myapp; permission mode 'normal' ... Allow?
+Devin   › edits src/utils.py · asks to run pytest → you approve · 41 passed
+Hermes  › Devin finished: 1 file changed, tests pass. Here is the summary ...
+```
+
+## You stay in charge
+
+- **Every run needs your yes.** Each run passes through Hermes' approval prompt. If nobody is there to answer, the run does not start.
+- **Permission mode is your setting, not the model's.** `plan`, `normal`, `accept-edits`, `smart`, `dangerous` or `autonomous` come only from the plugin settings. `dangerous` also needs an explicit `allow_dangerous: true`. Hermes cannot pass a mode, a model or a sandbox flag per call.
+- **Devin's own questions reach you.** In a foreground run, Devin's "may I run this command?" prompts become Hermes approval prompts. Background runs deny them, because nobody is waiting to answer.
+- **Fenced folders.** `allowed_roots` keeps Devin inside the directories you list.
+- **Nothing left behind.** On Windows the run lives in a Job Object, so even a crashed Hermes takes Devin's helpers with it. On macOS and Linux it gets its own process group.
+- **Output is data.** Devin's reply is quoted and labelled as another agent's output when it comes back into the chat.
+
+The full model is in [Approval and permissions](docs/approval-and-permissions.md).
+
+## Make it yours
+
+### Install
+
+You need Hermes Agent and the Devin CLI, installed and logged in:
 
 ```powershell
-$hermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
-New-Item -ItemType Junction -Path "$hermesHome\plugins\devin" -Target "E:\Dev\Hermes\plugins\hermes-devin"
+# Windows (PowerShell)
+irm https://static.devin.ai/cli/setup.ps1 | iex
+devin auth login
 ```
 
-macOS / Linux:
-
-```bash
-ln -s /path/to/hermes-devin ~/.hermes/plugins/devin
+```sh
+# macOS / Linux
+curl -fsSL https://cli.devin.ai/install.sh | bash
+devin auth login
 ```
 
-Then enable it. Plugins are opt-in, and the plugin key is `devin`:
+Then install and enable the plugin. Its key in Hermes is `devin`:
 
-```bash
+```sh
+hermes plugins install Adolanium/hermes-devin
 hermes plugins enable devin
 ```
 
-Or edit `config.yaml` by hand:
+Installing from GitHub uses your git credentials, so you need read access to the repository while it is private.
 
-```yaml
-plugins:
-  enabled: [devin]
+Working from a local checkout instead? Link it into your Hermes home's `plugins/` folder as `devin`:
+
+```powershell
+$h = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
+New-Item -ItemType Junction -Path "$h\plugins\devin" -Target "E:\Dev\Hermes\plugins\hermes-devin"
 ```
 
-The tools join Hermes' existing `delegation` toolset, which is on by default.
-If you trimmed your toolsets, add `delegation` back. Subagents never get this
-toolset, so only the main agent can start Devin.
+Restart Hermes and check the setup:
 
-Restart Hermes, then check the setup with:
-
-```
+```text
 /devin doctor
 ```
 
-## Configuration
+The tools join the `delegation` toolset, which Hermes enables by default. Subagents never get it, so only the main agent can start Devin.
 
-All settings live under `plugins.entries.devin.settings` in `config.yaml`.
-Hermes Desktop shows the same fields as a form, from `config_schema` in
-`plugin.yaml`.
+### Quick config
 
-Settings are validated whenever they are read, so you never need a restart for
-them. Invalid settings block every run with a message naming the problem; they
-never fall back to something more permissive. The only exception is
-`persist_runs`, which is read once at startup.
+Settings live under `plugins.entries.devin.settings` in `config.yaml`. Hermes Desktop shows the same fields as a form. The defaults are safe. These are the ones most people touch:
 
 ```yaml
 plugins:
   enabled: [devin]
   entries:
     devin:
-      # Needed only for background completion notices in the TUI, Desktop
-      # or messaging gateway. The classic CLI does not need it.
-      allow_gateway_injection: true
+      allow_gateway_injection: true    # background results in TUI, Desktop and gateway chats
       settings:
-        backend: acp                 # acp (default) | print
-        permission_mode: normal      # plan | normal | accept-edits | smart | dangerous | autonomous
-        allow_dangerous: false       # required for permission_mode: dangerous
-        permission_requests: ask     # ask: relay Devin's prompts to you (foreground only) | deny
-        approval_scope: run          # run: "always allow" covers the identical request only
-                                     # workspace: covers any prompt in that directory and mode
-        cli_path: ""                 # empty: find `devin` on PATH
-        model: ""                    # empty: Devin's default model
-        default_cwd: ""              # empty: Hermes' working directory
-        allowed_roots: []            # if set, Devin may only run inside these directories
-        trust_workspace: false       # print backend: pass --respect-workspace-trust false
-        sandbox: false               # Devin's --sandbox (not available on native Windows)
-        default_background: false
-        timeout_seconds: 1800        # foreground default
+        permission_mode: normal        # plan | normal | accept-edits | smart | dangerous | autonomous
+        allowed_roots: ["E:\\Dev"]     # Devin may only work inside these folders
+        max_concurrent_runs: 2
+        timeout_seconds: 1800          # foreground runs
         background_timeout_seconds: 3600
-        max_timeout_seconds: 7200    # cap for any timeout_seconds the model asks for
-        max_concurrent_runs: 2       # 1-16; extra runs are refused, not queued
-        max_output_chars: 200000     # stored output per run (head and tail kept)
-        max_result_chars: 12000      # output returned to the model by default
-        max_progress_events: 500
-        max_prompt_chars: 100000
-        history_limit: 50            # finished runs kept in memory and on disk
-        notify_on_complete: true     # post background results to the conversation
-        preflight_auth_check: true   # run `devin auth status` before a run (cached for 5 min)
-        cancel_grace_seconds: 5
-        persist_runs: true           # keep run history under <hermes home>/plugin-data/devin/
-        extra_env: {}                # extra environment variables for Devin
 ```
 
-### Permission modes
+Invalid settings block runs with a message that names the problem. Every option is in the [configuration reference](docs/configuration.md).
 
-| Setting        | What Devin may do without asking                       | Prompts from Devin             |
-|----------------|--------------------------------------------------------|--------------------------------|
-| `plan`         | read and search only (Devin's plan mode, ACP only)     | writes and commands denied     |
-| `normal`       | nothing                                                | relayed to you, or denied      |
-| `accept-edits` | file edits                                             | commands relayed, or denied    |
-| `smart`        | file edits; Devin's own safety model handles the rest  | the rest relayed, or denied    |
-| `dangerous`    | everything, including destructive commands             | none                           |
-| `autonomous`   | sandboxed; needs `sandbox: true`, not on native Windows| -                              |
+### Use it
 
-The mode is applied in several places at once:
+Ask in plain words. Hermes picks the tool.
 
-- `DEVIN_PERMISSION_MODE` in Devin's environment, overwriting any inherited value
-- `--permission-mode` on the command line (print backend)
-- the matching ACP session mode, if Devin advertises one
-- the plugin's own answer to each ACP permission request
+> Have Devin fix the failing test in tests/test_api.py in E:\Dev\myapp. Wait for it.
 
-So even if one of those is ignored, Devin cannot do more than the configured
-mode allows. Tool arguments such as `permission_mode`, `mode`, `model`,
-`sandbox` or `allow_dangerous` are rejected outright.
+> In the background, ask Devin to migrate the test suite in E:\Dev\myapp from unittest to pytest. Tell me when it's done.
 
-The Hermes approval prompt always names the mode. The remembered-approval key
-includes the mode and backend, so approving a `normal` run never pre-approves a
-`dangerous` one.
+> What is Devin doing right now?
 
-### Optional: the Devin MCP server
+> Stop the Devin run.
 
-Separately from this plugin, Hermes can talk to Devin's hosted MCP server
-(Devin sessions, wiki and repository Q&A) through its own MCP client. This
-needs a Devin API key starting with `cog_`; legacy `apk_` keys do not work.
-Keep the key in your environment or `.env`, not in `config.yaml`:
+Or drive runs yourself:
 
-```yaml
-mcp_servers:
-  devin:
-    url: https://mcp.devin.ai/mcp
-    headers:
-      Authorization: "Bearer ${DEVIN_API_KEY}"
-      # X-Org-Id: "${DEVIN_ORG_ID}"   # only for enterprise keys and personal access tokens
+```text
+/devin list                 recent runs
+/devin status <run_id>      state, plan and latest events
+/devin cancel <run_id|all>  stop a run and everything it started
+/devin doctor               settings, CLI and login check
 ```
 
-This plugin does not need it, and does not use it.
+| Tool | What Hermes uses it for |
+| --- | --- |
+| `delegate_to_devin` | Start a run: `prompt`, plus optional `cwd`, `background`, `timeout_seconds`, `title` |
+| `devin_list_runs` | Recent runs, active or finished |
+| `devin_run_status` | State, plan, recent events and output tail of one run |
+| `devin_run_result` | Output, files changed, permission decisions, usage and errors |
+| `devin_cancel_run` | Stop a run and every process it started |
 
-## Tools
+## Built on what Devin already speaks
 
-| Tool                | Purpose                                                                        |
-|---------------------|--------------------------------------------------------------------------------|
-| `delegate_to_devin` | Start a run: `prompt` (required), `cwd`, `background`, `timeout_seconds`, `title` |
-| `devin_list_runs`   | Recent runs, filtered by `state`: `active`, `finished` or `all`                |
-| `devin_run_status`  | State, plan, recent events and output tail of one run                         |
-| `devin_run_result`  | Full (capped) output, files changed, permission decisions, usage, errors     |
-| `devin_cancel_run`  | Stop a run and every process it started                                      |
+Hermes Devin talks to `devin acp`, the same Agent Client Protocol Devin uses for editor integrations. That gives typed progress events, a real cancel, and permission requests the plugin can answer itself. A plain `devin -p` backend is there as a fallback. [How it works](docs/how-it-works.md) explains the choice.
 
-The `/devin` slash command does the same things without going through the model:
+There is no fork, upstream patch, extra service or Python dependency. Run history is kept as small JSON files in Hermes' plugin data folder, and live events are published for a future Desktop panel. See [Run data and events](docs/run-data-and-events.md).
 
-```
-/devin list
-/devin status <run_id>
-/devin cancel <run_id|all>
-/devin doctor
-```
+Want Devin's hosted tools in Hermes too? The [Devin MCP server](docs/devin-mcp.md) works alongside this plugin.
 
-## Examples
+## Documentation
 
-Ask Hermes:
-
-> Have Devin add type hints to `src/utils.py` in E:\Dev\myapp and run the
-> tests. Wait for it.
-
-Hermes calls `delegate_to_devin` and you get an approval prompt like this:
-
-```
-Start a Devin run in E:\Dev\myapp; permission mode 'normal' (Devin asks before
-edits and commands); foreground, timeout 1800s, backend acp. Task: ...
-```
-
-While Devin works, its own permission prompts ("Run `pytest`") show up as
-further approval prompts. The tool result lists Devin's answer, the files it
-touched and any errors.
-
-For something long:
-
-> In the background, ask Devin to migrate the test suite in E:\Dev\myapp from
-> unittest to pytest. Tell me when it's done.
-
-The call returns a run id right away. When Devin finishes, a message starting
-with `[Devin background run dv-... succeeded ...]` lands in the conversation,
-with Devin's output quoted as data. In background runs nobody is around to
-answer Devin's prompts, so they are denied. Pick `accept-edits` (or wider)
-if background runs need to edit files on their own.
-
-If you send a message while a foreground run is working, Hermes asks the tool
-to yield. The run then carries on in the background and reports back the same
-way.
-
-## How it works
-
-1. **Approval.** The plugin's `pre_tool_call` hook answers every
-   `delegate_to_devin` call with an `approve` directive. Hermes then shows its
-   normal approval prompt, which fails closed when nobody can answer. The hook
-   first blocks calls that could not run anyway: invalid settings, a missing
-   CLI, a bad `cwd`, or the concurrency limit. That way you are never asked to
-   approve something that will fail.
-
-   The hook leaves a single-use ticket bound to the session and the exact
-   arguments, and the tool handler consumes it. If the handler is ever reached
-   without a ticket (some other code path that skipped hooks), it asks the
-   same approval gate itself before starting anything.
-2. **Preflight.** It resolves the `devin` binary and runs `devin auth status`.
-   This produces clear errors for "CLI not found" (with install commands) and
-   "not logged in" (run `devin auth login`).
-3. **Run.** `devin acp` is started in a new process group (Windows: plus a Job
-   Object), then the plugin speaks JSON-RPC over stdio: `initialize`,
-   `session/new`, `session/set_mode`, `session/prompt`.
-
-   `session/update` notifications become run events. `session/request_permission`
-   is answered from the permission mode, or relayed to you (foreground only).
-4. **Stop.** On cancel, timeout or interrupt, the plugin sends
-   `session/cancel`, waits `cancel_grace_seconds`, then kills the tree: Job
-   Object termination, else `taskkill /T /F`, or the POSIX process group. The
-   result includes a `kill_report` (method, graceful or not, steps). After a
-   normal exit, leftover child processes are reaped the same way.
-5. **Results.** Output is capped, keeping the head and tail. Background results
-   are posted with `ctx.inject_message`, and every run is saved as JSON for
-   history.
-
-### Why ACP instead of `devin -p`
-
-`devin -p` prints text and exits. That leaves no structured progress, no way to
-answer Devin's permission prompts, and no clean cancel short of killing the
-process.
-
-ACP is the protocol Devin uses for editor integrations. It gives typed events
-(messages, tool calls with kinds and file locations, plan, usage), a
-protocol-level `session/cancel`, and a permission callback the plugin answers
-itself. That callback is what lets the configured mode be enforced on the
-Hermes side too. The `print` backend stays available as a fallback
-(`backend: print`).
-
-## Run data and events (for a Desktop panel)
-
-Each run is a plain JSON snapshot (`schema_version: 1`) with these fields:
-
-- id, title, state, cwd, permission mode, backend
-- timestamps
-- approval record
-- plan, tool calls, permission decisions
-- usage, error, kill report
-- capped event list and capped output
-
-The run states are `created`, `starting`, `running`, `cancelling`,
-`succeeded`, `failed`, `cancelled` and `timed_out`.
-
-- Snapshots are written to `<hermes home>/plugin-data/devin/runs/<run id>.json`.
-- Live events go out as `ctx.emit` (`devin:run.created`, `devin:run.state`,
-  `devin:run.progress`, `devin:run.permission`, `devin:run.usage`,
-  `devin:run.finished`). They also go to the Desktop event bus as
-  `plugin.devin.run.*` (listen with `host.onEvent`).
-- Each event carries `{schema_version, type, run_id, at, run: <summary>, seq, event}`.
-- `dashboard/plugin_api.py` is a ready read-only backend (`GET /runs`,
-  `GET /runs/{run_id}`). Hermes mounts it once a `dashboard/manifest.json` with
-  `"api": "plugin_api.py"` is added together with a panel UI. Until then it is
-  not loaded.
-
-## Security notes
-
-- The prompt Devin receives is written by the model. Read the approval
-  prompt before saying yes, especially with wide permission modes.
-- Devin's output is another agent's text. Completion notices quote it inside
-  `<<<DEVIN_OUTPUT ... DEVIN_OUTPUT>>>` and label it as data, not instructions.
-  Starting another run still needs your approval.
-- `allowed_roots` limits where Devin may run. Without it, any existing
-  directory the model names can be used, and the approval prompt shows which
-  one.
-- When the plugin is unloaded or Hermes exits, active runs are stopped. On
-  Windows, the Job Object also kills Devin's tree if Hermes crashes.
-
-## Development
-
-Tests use a fake Devin CLI (`tests/fake_devin.py`). The real one is never run.
-
-```bash
-cd tests
-python -m pytest
-```
-
-On Windows, use the Hermes venv's Python, for example
-`E:\Dev\Hermes\hermes-agent\.venv\Scripts\python.exe -m pytest`. Pytest's
-scratch files go to `.pytest_tmp/` inside the plugin folder.
-`tests/test_hermes_contract.py` checks the Hermes APIs the plugin relies on.
-It runs when Hermes is importable next to that Python (or `HERMES_AGENT_DIR` is
-set), and is skipped otherwise.
+- [How it works](docs/how-it-works.md): run lifecycle, ACP vs print backend
+- [Configuration reference](docs/configuration.md): every setting, its default and its limits
+- [Approval and permissions](docs/approval-and-permissions.md): the approval gate and how the permission mode is enforced
+- [Process trees on Windows and POSIX](docs/process-tree.md): how runs are stopped and cleaned up
+- [Run data and events](docs/run-data-and-events.md): the run model, stored snapshots and live events for Desktop
+- [Devin MCP server](docs/devin-mcp.md): optional `mcp_servers` setup
+- [Development and testing](docs/development.md)
+- [Known limitations](docs/limitations.md)
 
 ## License
 
-MIT
+[MIT](LICENSE).
+
+<br />
+
+<div align="center">
+  <strong>Hermes Devin</strong><br />
+  <sub>Delegate the work. Keep the say.</sub>
+</div>
+
+<br />
+
+> **Community project**
+>
+> Hermes Devin is an independent community plugin. It is not affiliated with, endorsed by, sponsored by, or officially associated with [Nous Research](https://github.com/NousResearch), the [Hermes Agent project](https://github.com/NousResearch/hermes-agent), or [Cognition](https://cognition.ai). Hermes, Hermes Agent, Nous Research, Devin and Cognition are names and marks belonging to their respective owners.

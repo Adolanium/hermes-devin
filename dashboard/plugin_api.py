@@ -7,7 +7,7 @@ Until then this module is inert: Hermes only imports it through a manifest.
 It reads the run snapshots the plugin writes to
 ``<HERMES_HOME>/plugin-data/devin/runs/<run id>.json`` (see ``store.py``), so it
 works from the dashboard process without access to the agent process. Live
-updates come from the ``plugin.devin.run.*`` events (see README).
+updates come from the ``plugin.devin.run.*`` events (see docs/run-data-and-events.md).
 
 Hermes imports this file on its own, not as part of the plugin package, so it
 has no relative imports.
