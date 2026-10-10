@@ -48,7 +48,7 @@ Hermes does not pass a tool-call id to tool handlers, so the ticket is matched o
 | Mode | Devin acts alone on | Devin's prompts | Notes |
 | --- | --- | --- | --- |
 | `plan` | reading, searching, thinking, fetching | everything else denied | Devin's read-only plan mode. ACP only; refused if Devin offers no read-only mode. |
-| `normal` | nothing | relayed to you, or denied | The default. |
+| `normal` | nothing | relayed to you, or denied | The default. Refused over ACP when Devin offers no matching mode, as Devin CLI 3000.x does; use `backend: print`. |
 | `accept-edits` | file edits, deletes and moves | the rest relayed, or denied | |
 | `smart` | file edits; Devin's safety model judges the rest | the rest relayed, or denied | |
 | `dangerous` | everything, including destructive commands | none | Needs `allow_dangerous: true`. The approval prompt says so in capitals. |
@@ -67,7 +67,7 @@ The mode is applied in four places at once. If one is ignored, the others still 
 
 1. `DEVIN_PERMISSION_MODE` in Devin's environment.
 2. `--permission-mode` on the command line (print backend).
-3. The matching ACP session mode, chosen with `session/set_mode` when Devin advertises one.
+3. The matching ACP session mode, chosen with `session/set_mode`. If Devin advertises modes but none matches, the run is refused, because staying in Devin's current mode could allow more.
 4. The plugin's own answer to each `session/request_permission`.
 
 ## Devin's own permission prompts

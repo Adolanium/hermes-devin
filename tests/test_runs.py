@@ -59,6 +59,32 @@ def test_dangerous_mode_maps_to_bypass(harness):
     assert {e["env_mode"] for e in h.log_entries()} == {"dangerous"}
 
 
+def test_acp_refuses_mode_devin_does_not_offer(harness):
+    # Devin advertises no "normal" mode and starts in accept-edits; running
+    # anyway would let it edit without asking. "auto" must not match "autonomous-x".
+    h = harness(scenario="devin_modes")
+    result = h.call("delegate_to_devin", {"prompt": "do it"})
+    assert result["state"] == "failed" and result["error"]["code"] == "refused", result
+    assert "'normal'" in result["error"]["message"] and "print" in result["error"]["message"]
+    methods = h.acp_methods()
+    assert "session/prompt" not in methods and "session/set_mode" not in methods
+
+
+@pytest.mark.parametrize("mode, expected", [("accept-edits", None), ("smart", "smart"), ("plan", "plan")])
+def test_acp_selects_devin_modes(harness, mode, expected):
+    h = harness({"permission_mode": mode}, scenario="devin_modes")
+    result = h.call("delegate_to_devin", {"prompt": "do it"})
+    assert result["state"] == "succeeded", result
+    set_mode = [e["msg"]["params"]["modeId"] for e in h.log_entries() if e["msg"].get("method") == "session/set_mode"]
+    assert set_mode == ([expected] if expected else [])
+
+
+def test_files_changed_includes_diff_paths(harness):
+    h = harness(scenario="diff_edit")
+    result = h.call("delegate_to_devin", {"prompt": "do it"})
+    assert result["files_changed"] == ["app.py", "util.py", "README.md"]
+
+
 def test_print_backend_success(harness, tmp_path):
     h = harness({"backend": "print", "permission_mode": "accept-edits", "model": "opus"})
     result = h.call("delegate_to_devin", {"prompt": "List the TODOs"})
@@ -72,6 +98,22 @@ def test_print_backend_success(harness, tmp_path):
     assert entry["prompt"] == "List the TODOs"
     prompt_file = argv[argv.index("--prompt-file") + 1]
     assert not os.path.exists(prompt_file), "prompt file must be removed after the run"
+
+
+def test_print_rejections_without_answer_fail(harness):
+    h = harness({"backend": "print"}, scenario="print_rejected")
+    result = h.call("delegate_to_devin", {"prompt": "x"})
+    assert result["state"] == "failed" and result["error"]["code"] == "permission_denied", result
+    assert "2 action(s)" in result["error"]["message"] and "'normal'" in result["error"]["message"]
+    assert [p["decision"] for p in result["permissions"]] == ["denied", "denied"]
+
+
+def test_print_rejections_with_answer_are_reported(harness):
+    h = harness({"backend": "print"}, scenario="print_rejected_partial")
+    result = h.call("delegate_to_devin", {"prompt": "x"})
+    assert result["state"] == "succeeded", result
+    assert "could not run the tests" in result["output"]
+    assert [p["decision"] for p in result["permissions"]] == ["denied", "denied"]
 
 
 def test_print_backend_trust_flag_only_when_configured(harness):

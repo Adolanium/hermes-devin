@@ -84,6 +84,14 @@ def print_mode(argv: list[str]) -> int:
         size = int(os.environ.get("FAKE_DEVIN_BIG", "50000"))
         sys.stdout.write("x" * size + "\nTHE END\n")
         return 0
+    if SCENARIO in ("print_rejected", "print_rejected_partial"):
+        # What Devin CLI 3000.x does when its mode would have asked: warn on stderr, exit 0.
+        if SCENARIO == "print_rejected_partial":
+            print("Read the code; could not run the tests.", flush=True)
+        for _ in range(2):
+            print("warning: rejected a tool call that requires confirmation. Running in non-interactive mode. "
+                  "Use --permission-mode dangerous to auto-approve all tools.", file=sys.stderr, flush=True)
+        return 0
     print(f"Done: {prompt[:40]}", flush=True)
     print("All tests pass.", flush=True)
     return 0
@@ -152,6 +160,13 @@ class Agent:
             outcome2 = (answer2.get("result") or {}).get("outcome") or {}
             text_chunk(sid, f"edit outcome: {outcome2.get('optionId')}\n")
         update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"})
+        if SCENARIO == "diff_edit":
+            # Real Devin names edited files only in diff content, never in locations.
+            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "t4", "title": "Wrote util.py", "kind": "edit",
+                         "content": [{"type": "diff", "path": "util.py", "newText": "x = 1"}]})
+            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "t4", "status": "completed",
+                         "content": [{"type": "diff", "path": "util.py", "newText": "x = 1"},
+                                     {"type": "diff", "path": "README.md", "newText": "y"}]})
         if SCENARIO in ("slow", "hang", "spawn_child"):
             if SCENARIO == "spawn_child":
                 spawn_grandchild()
@@ -199,11 +214,17 @@ class Agent:
                 if SCENARIO == "auth":
                     send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": "Authentication required"}})
                     continue
-                send({"jsonrpc": "2.0", "id": rid, "result": {
-                    "sessionId": self.session,
-                    "modes": {"currentModeId": "normal", "availableModes": [
+                if SCENARIO == "devin_modes":
+                    # What Devin CLI 3000.x advertises: no mode that asks before edits.
+                    modes = {"currentModeId": "accept-edits", "availableModes": [
+                        {"id": "accept-edits", "name": "Code"}, {"id": "smart", "name": "Smart"},
+                        {"id": "ask", "name": "Ask"}, {"id": "plan", "name": "Plan"},
+                        {"id": "bypass", "name": "Bypass Permissions"}, {"id": "autonomous-x", "name": "Auto Pilot"}]}
+                else:
+                    modes = {"currentModeId": "normal", "availableModes": [
                         {"id": "normal", "name": "Normal"}, {"id": "accept-edits", "name": "Accept Edits"},
-                        {"id": "plan", "name": "Plan"}, {"id": "bypass", "name": "Bypass"}]}}})
+                        {"id": "plan", "name": "Plan"}, {"id": "bypass", "name": "Bypass"}]}
+                send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": self.session, "modes": modes}})
             elif method == "session/set_mode":
                 send({"jsonrpc": "2.0", "id": rid, "result": {}})
             elif method == "session/prompt":

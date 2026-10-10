@@ -72,6 +72,7 @@ class ErrorCode(str, Enum):
     INTERRUPTED = "interrupted"
     WORKSPACE_UNTRUSTED = "workspace_untrusted"
     REFUSED = "refused"
+    PERMISSION_DENIED = "permission_denied"
     SPAWN_FAILED = "spawn_failed"
     INTERNAL = "internal_error"
 

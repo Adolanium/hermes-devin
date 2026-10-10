@@ -207,15 +207,18 @@ class _RunIO:
                 allowed, reason = False, "run stopped before the prompt was answered"
             else:
                 allowed, reason = ask.answer
+        self.record_permission(title, kind, allowed, reason, request_id=str(detail.get("tool_call_id") or ""))
+        return allowed, reason
+
+    def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *, request_id: str = "") -> None:
         decision = PermissionDecision(
-            request_id=str(detail.get("tool_call_id") or ""), title=title[:300], kind=kind,
+            request_id=request_id, title=title[:300], kind=kind,
             decision="allowed" if allowed else "denied", reason=reason, at=time.time())
         with self.run._lock:
             self.run.permissions.append(decision)
             event = self.run.add_event("permission", f"{decision.decision}: {title[:200]}",
                                        permission_kind=kind, reason=reason)
         self.manager._publish("run.permission", self.run, event)
-        return allowed, reason
 
 
 # --- manager -------------------------------------------------------------------------

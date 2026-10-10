@@ -12,7 +12,7 @@ This page follows one run from the tool call to the result, then explains why th
 6. **The session runs.** The plugin speaks JSON-RPC over stdio:
    - `initialize`, announcing no file-system or terminal capabilities, so Devin uses its own tools
    - `session/new` with the working directory
-   - `session/set_mode` when Devin advertises a mode matching the configured permission mode
+   - `session/set_mode` when Devin advertises a mode matching the configured permission mode. A mode is matched by exact id or name. If Devin advertises modes but none matches, the run is refused.
    - `session/prompt` with the task
 7. **Progress streams in.** `session/update` notifications become run events: message and thought chunks, tool calls with their kind and file locations, plan updates, mode changes and usage. Devin's `session/request_permission` calls are answered by the plugin. See [Approval and permissions](approval-and-permissions.md#devins-own-permission-prompts).
 8. **The run ends.** The prompt returns with a stop reason: `end_turn` is success, `cancelled` is a stop, `refusal` and `max_tokens` are reported as such. Errors are mapped to clear codes, listed below.
@@ -37,7 +37,8 @@ Completion notices need a way back into the conversation. The classic CLI always
 | `timeout` | The run hit its timeout and was stopped. |
 | `exit_nonzero` | Devin exited with an error code. The last part of its stderr is included. |
 | `workspace_untrusted` | Devin refused an untrusted folder (print backend). See `trust_workspace`. |
-| `refused` | Devin refused the task, or plan mode was configured but Devin offered no read-only mode. |
+| `refused` | Devin refused the task, or Devin offered no ACP session mode matching the configured permission mode. |
+| `permission_denied` | Print backend: Devin rejected actions its permission mode does not allow, because print mode cannot ask, and gave no answer. |
 | `protocol_error` | Devin sent something the plugin could not use. |
 | `cancelled`, `interrupted` | Stopped by a cancel, or by a Hermes interrupt. |
 | `spawn_failed`, `internal_error` | The process could not be started, or the plugin hit an unexpected error. |
