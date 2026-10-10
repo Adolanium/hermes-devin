@@ -39,7 +39,7 @@ An illustrative exchange:
 
 ```text
 You     › Have Devin add type hints to src/utils.py in E:\Dev\myapp and run the tests.
-Hermes  › [approval] Start a Devin run in E:\Dev\myapp; permission mode 'normal' ... Allow?
+Hermes  › [approval] Start a Devin run in E:\Dev\myapp; permission mode 'accept-edits' ... Allow?
 Devin   › edits src/utils.py · asks to run pytest → you approve · 41 passed
 Hermes  › Devin finished: 1 file changed, tests pass. Here is the summary ...
 ```
@@ -82,14 +82,15 @@ hermes plugins enable devin
 
 Installing from GitHub uses your git credentials, so you need read access to the repository while it is private.
 
-Working from a local checkout instead? Link it into your Hermes home's `plugins/` folder as `devin`:
+Working from a local checkout instead? Link it into your Hermes home's `plugins/` folder as `devin`, then enable it. Use one method or the other: `hermes plugins install` refuses to replace a linked plugin.
 
 ```powershell
 $h = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
-New-Item -ItemType Junction -Path "$h\plugins\devin" -Target "E:\Dev\Hermes\plugins\hermes-devin"
+New-Item -ItemType Junction -Path "$h\plugins\devin" -Target "C:\path\to\hermes-devin"
+hermes plugins enable devin
 ```
 
-Restart Hermes and check the setup:
+Restart Hermes and check the setup from an interactive session:
 
 ```text
 /devin doctor
@@ -99,7 +100,7 @@ The tools join the `delegation` toolset, which Hermes enables by default. Subage
 
 ### Quick config
 
-Settings live under `plugins.entries.devin.settings` in `config.yaml`. Hermes Desktop shows the same fields as a form. The defaults are safe. These are the ones most people touch:
+Settings live under `plugins.entries.devin.settings` in `config.yaml`. Hermes Desktop shows the same fields as a form. These are the ones most people touch:
 
 ```yaml
 plugins:
@@ -108,12 +109,14 @@ plugins:
     devin:
       allow_gateway_injection: true    # background results in TUI, Desktop and gateway chats
       settings:
-        permission_mode: normal        # plan | normal | accept-edits | smart | dangerous | autonomous
+        permission_mode: accept-edits  # plan | normal | accept-edits | smart | dangerous | autonomous
         allowed_roots: ["E:\\Dev"]     # Devin may only work inside these folders
         max_concurrent_runs: 2
         timeout_seconds: 1800          # foreground runs
         background_timeout_seconds: 3600
 ```
+
+Set `permission_mode` before your first run. The default, `normal`, never lets Devin act without asking. Current Devin builds offer no session mode like that over ACP, so the plugin refuses those runs rather than let Devin do more than you allowed. Choose `accept-edits` to let Devin edit files on its own while its other requests come to you, or keep `normal` with `backend: print`, where Devin rejects anything that needs confirmation. See [Known limitations](docs/limitations.md).
 
 Invalid settings block runs with a message that names the problem. Every option is in the [configuration reference](docs/configuration.md).
 
