@@ -1,0 +1,9 @@
+{
+  "name": "devin",
+  "label": "Devin",
+  "description": "Backend routes for the Devin runs panel in Hermes Desktop.",
+  "version": "0.1.0",
+  "api": "plugin_api.py",
+  "entry": "web.js",
+  "tab": { "hidden": true }
+}
