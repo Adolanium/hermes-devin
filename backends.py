@@ -42,6 +42,9 @@ _AUTH_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 _TRUST_PATTERNS = re.compile(r"workspace trust|untrusted (?:directory|workspace)|not trusted", re.IGNORECASE)
+# What `devin --print` writes to stderr for each action its permission mode
+# would have asked about. It still exits 0.
+_PRINT_REJECTED = re.compile(r"rejected a tool call that requires confirmation", re.IGNORECASE)
 
 # Devin permission modes as the CLI spells them, for DEVIN_PERMISSION_MODE / --permission-mode.
 CLI_PERMISSION_MODE = {
@@ -49,7 +52,9 @@ CLI_PERMISSION_MODE = {
     "dangerous": "dangerous", "autonomous": "autonomous",
 }
 
-# Words used to spot the matching ACP session mode advertised by the agent.
+# Names that identify the matching ACP session mode advertised by the agent.
+# Matched exactly against a mode's id or name, never as substrings: "auto"
+# must not pick an "autonomous" mode.
 _MODE_HINTS = {
     "plan": ("plan",),
     "normal": ("normal", "default", "auto"),
@@ -88,6 +93,8 @@ class RunIO(Protocol):
     def append_output(self, text: str) -> None: ...
     def mark_running(self) -> None: ...
     def ask_permission(self, title: str, kind: str, detail: dict) -> tuple[bool, str]: ...
+    def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *,
+                          request_id: str = "") -> None: ...
     def spawn(self, argv: list[str], *, stdin_pipe: bool) -> Any: ...
     def cancel_reason(self) -> str: ...
 
@@ -158,6 +165,19 @@ def _text_of(content: Any) -> str:
     return ""
 
 
+def _merge_paths(paths: list[str], update: dict) -> list[str]:
+    """Add the file paths a tool call touches: its ``locations`` and the
+    ``path`` of any ``diff`` content (Devin reports edits only that way)."""
+    found = [loc.get("path") for loc in update.get("locations") or [] if isinstance(loc, dict)]
+    found += [item.get("path") for item in update.get("content") or []
+              if isinstance(item, dict) and item.get("type") == "diff"]
+    merged = list(paths)
+    for path in found:
+        if isinstance(path, str) and path and path not in merged:
+            merged.append(path)
+    return merged[:20]
+
+
 def _pick_option(options: list[dict], allow: bool) -> str | None:
     wanted = ("allow_once", "allow_always") if allow else ("reject_once", "reject_always")
     for kind in wanted:
@@ -207,8 +227,7 @@ class AcpBackend:
             info = {
                 "title": str(update.get("title") or ""), "kind": str(update.get("kind") or "other"),
                 "status": str(update.get("status") or "pending"),
-                "locations": [loc.get("path") for loc in update.get("locations") or []
-                              if isinstance(loc, dict) and loc.get("path")][:20],
+                "locations": _merge_paths([], update),
             }
             with run._lock:
                 run.tool_calls[call_id] = info
@@ -222,6 +241,7 @@ class AcpBackend:
                 for key in ("title", "kind", "status"):
                     if update.get(key):
                         info[key] = str(update[key])
+                info["locations"] = _merge_paths(info.get("locations") or [], update)
             if update.get("status") in ("completed", "failed"):
                 io.emit("tool_update", info.get("title", ""), tool_call_id=call_id, status=update.get("status"))
         elif kind == "plan":
@@ -288,18 +308,16 @@ class AcpBackend:
             if any(h == ident or h == name for h in hints):
                 match = str(mode["id"])
                 break
-        if match is None:
-            for mode in available:
-                ident = str(mode.get("id")).lower()
-                if any(h in ident for h in hints):
-                    match = str(mode["id"])
-                    break
         current = str(modes.get("currentModeId") or "")
         if match is None:
+            # Staying in the agent's current mode could grant more than the
+            # configured one (Devin starts in accept-edits), so fail closed.
             io.emit("mode", current, note=f"agent advertises no mode matching '{wanted}'")
-            if wanted == "plan":
-                raise RuntimeError("Devin did not advertise a read-only plan mode; refusing to run 'plan' unsafely")
-            return
+            offered = ", ".join(str(m["id"]) for m in available)
+            raise RuntimeError(
+                f"Devin offers no session mode matching permission_mode '{wanted}' over ACP "
+                f"(offered: {offered}); refusing to run in '{current or 'its default mode'}' instead. "
+                "Use backend 'print', which passes --permission-mode, or pick a mode Devin offers.")
         if match != current:
             peer.request("session/set_mode", {"sessionId": self._session_id, "modeId": match}, timeout=30)
         io.emit("mode", match)
@@ -515,7 +533,7 @@ class PrintBackend:
         tail = stderr.join(2)
         code = tree.poll()
         if code == 0:
-            return Outcome(RunState.SUCCEEDED, stop_reason="exit", exit_code=0)
+            return self._success_or_denied(io, tail)
         out_tail = io.run.output.value()[-2000:]
         if looks_unauthenticated(tail) or looks_unauthenticated(out_tail):
             return Outcome(RunState.FAILED, exit_code=code, error=RunError(
@@ -531,6 +549,25 @@ class PrintBackend:
         return Outcome(RunState.FAILED, exit_code=code, error=RunError(
             ErrorCode.EXIT_NONZERO.value, f"devin exited with code {code}", exit_code=code,
             stderr_tail=tail[-2000:]))
+
+    @staticmethod
+    def _success_or_denied(io: RunIO, tail: str) -> Outcome:
+        # Print mode cannot ask, so Devin rejects whatever its mode does not
+        # cover and exits 0. Record each rejection; with no answer either, the
+        # run did not do its task.
+        rejected = len(_PRINT_REJECTED.findall(tail))
+        mode = io.run.permission_mode
+        for _ in range(rejected):
+            io.record_permission("an action that needed confirmation", "other", False,
+                                 f"print mode cannot ask; permission mode '{mode}'")
+        if rejected and not io.run.output.value().strip():
+            return Outcome(RunState.FAILED, stop_reason="exit", exit_code=0, error=RunError(
+                ErrorCode.PERMISSION_DENIED.value,
+                f"Devin stopped without an answer after {rejected} action(s) needed confirmation, "
+                f"which print mode cannot ask for. Permission mode '{mode}' does not allow them; "
+                "choose a wider mode such as accept-edits if Devin should act on its own.",
+                exit_code=0, stderr_tail=tail[-2000:]))
+        return Outcome(RunState.SUCCEEDED, stop_reason="exit", exit_code=0)
 
 
 def permission_policy(mode: str, kind: str) -> bool | None:
