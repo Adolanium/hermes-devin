@@ -1,0 +1,126 @@
+name: devin
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: >-
+  Delegate coding tasks to the local Devin CLI. Every run needs your approval,
+  the permission mode comes from plugin settings only, progress streams live
+  over ACP, long tasks run in the background, and stopping a run kills Devin's
+  whole process tree.
+author: Adolanium
+license: MIT
+kind: standalone
+tags: [delegation, coding-agent, devin]
+
+provides_tools:
+  - delegate_to_devin
+  - devin_list_runs
+  - devin_run_status
+  - devin_run_result
+  - devin_cancel_run
+
+provides_hooks:
+  - pre_tool_call
+  - post_approval_response
+
+config_schema:
+  backend:
+    type: str
+    default: acp
+    choices: [acp, print]
+    label: Backend
+    description: acp streams live progress over the Agent Client Protocol; print runs devin -p.
+  permission_mode:
+    type: str
+    default: normal
+    choices: [plan, normal, accept-edits, smart, dangerous, autonomous]
+    label: Devin permission mode
+    description: Never taken from the model. 'dangerous' also needs allow_dangerous.
+  allow_dangerous:
+    type: bool
+    default: false
+    label: Allow dangerous mode
+    description: Required opt-in for permission_mode dangerous (every action auto-approved).
+  permission_requests:
+    type: str
+    default: ask
+    choices: [ask, deny]
+    label: Devin's in-run permission prompts
+    description: ask relays them to you during foreground runs; background runs always deny.
+  approval_scope:
+    type: str
+    default: run
+    choices: [run, workspace]
+    label: Remembered approvals cover
+  cli_path:
+    type: str
+    default: ""
+    label: Devin CLI path
+    description: Leave empty to use devin from PATH.
+  model:
+    type: str
+    default: ""
+    label: Devin model
+  default_cwd:
+    type: str
+    default: ""
+    label: Default working directory
+  allowed_roots:
+    type: list
+    default: []
+    label: Allowed working directories
+    description: When set, runs may only start inside these directories.
+  trust_workspace:
+    type: bool
+    default: false
+    label: Skip Devin's workspace trust check (print backend)
+  sandbox:
+    type: bool
+    default: false
+    label: Devin OS sandbox (macOS/Linux only)
+  default_background:
+    type: bool
+    default: false
+  timeout_seconds:
+    type: int
+    default: 1800
+  background_timeout_seconds:
+    type: int
+    default: 3600
+  max_timeout_seconds:
+    type: int
+    default: 7200
+  max_concurrent_runs:
+    type: int
+    default: 2
+  max_output_chars:
+    type: int
+    default: 200000
+  max_result_chars:
+    type: int
+    default: 12000
+  max_progress_events:
+    type: int
+    default: 500
+  max_prompt_chars:
+    type: int
+    default: 100000
+  history_limit:
+    type: int
+    default: 50
+  notify_on_complete:
+    type: bool
+    default: true
+  preflight_auth_check:
+    type: bool
+    default: true
+  cancel_grace_seconds:
+    type: float
+    default: 5.0
+  persist_runs:
+    type: bool
+    default: true
+  extra_env:
+    type: dict
+    default: {}
+    description: Extra environment variables for the Devin process.
