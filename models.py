@@ -320,6 +320,7 @@ class Run:
                 "finished_at": self.finished_at, "updated_at": self.updated_at,
                 "duration_seconds": self.duration_seconds(),
                 "tool_calls": len(self.tool_calls),
+                "files_changed": self.files_changed()[:50],
                 "permission_requests": len(self.permissions),
                 "last_activity": self._last_activity(),
             }
@@ -328,6 +329,17 @@ class Run:
             if self.error:
                 out["error"] = self.error.to_dict()
             return out
+
+    def files_changed(self) -> list[str]:
+        """Paths of files Devin edited, deleted or moved, in first-touched order."""
+        files: list[str] = []
+        with self._lock:
+            for info in self.tool_calls.values():
+                if info.get("kind") in ("edit", "delete", "move"):
+                    for path in info.get("locations") or []:
+                        if path not in files:
+                            files.append(path)
+        return files
 
     def _last_activity(self) -> str:
         for event in reversed(self.events):

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -37,6 +39,28 @@ _FORBIDDEN_ARGS = {"permission_mode", "mode", "allow_dangerous", "dangerous", "y
 
 def _json(data: dict[str, Any]) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _session_platform() -> str:
+    """The frontend of the current session, read the way Hermes' prompt builder reads it."""
+    platform = os.environ.get("HERMES_PLATFORM") or os.environ.get("HERMES_SESSION_PLATFORM")
+    if platform:
+        return platform.strip().lower()
+    get_session_env = getattr(sys.modules.get("gateway.session_context"), "get_session_env", None)
+    try:
+        return str((get_session_env("HERMES_SESSION_PLATFORM") if get_session_env else "") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _with_card(view: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """In Hermes Desktop, offer the transcript directive that renders a live run card.
+
+    Other frontends would show the directive as raw text, so it is only added there.
+    """
+    if _session_platform() == "desktop":
+        view["card"] = f'::devin-run{{id="{run_id}"}}'
+    return view
 
 
 def _error(code: str, message: str, **extra: Any) -> str:
@@ -208,23 +232,23 @@ class DevinPlugin:
         except RunRefused as exc:
             return _error(exc.code, exc.message)
         if parsed["background"]:
-            return _json({
+            return _json(_with_card({
                 "ok": True, "run_id": run.id, "state": run.state.value, "background": True,
                 "cwd": run.cwd, "permission_mode": run.permission_mode,
                 "message": (f"Devin is working in the background as {run.id}. The result will be posted to "
                             "this conversation when it finishes; use devin_run_status to check progress."),
-            })
+            }, run.id))
         how = self.manager.wait_foreground(run, interrupted=self.interrupted, gate=self.gate,
                                            yield_requested=self.yield_requested, session_key=self.session_key)
         if how == "detached":
-            return _json({
+            return _json(_with_card({
                 "ok": True, "run_id": run.id, "state": run.state.value, "background": True,
                 "cwd": run.cwd, "permission_mode": run.permission_mode,
                 "message": (f"Devin run {run.id} was moved to the background so the conversation can continue. "
                             "Its result will be posted here when it finishes. From now on Devin's permission "
                             "prompts are denied, because nobody is waiting to answer them."),
-            })
-        return _json(self._result_view(run, cfg.max_result_chars))
+            }, run.id))
+        return _json(_with_card(self._result_view(run, cfg.max_result_chars), run.id))
 
     # -- companions ---------------------------------------------------------------
 
@@ -238,13 +262,6 @@ class DevinPlugin:
 
     def _result_view(self, run: Run, limit: int) -> dict[str, Any]:
         snap = run.snapshot(events=0, output_limit=limit)
-        files: list[str] = []
-        with run._lock:
-            for info in run.tool_calls.values():
-                if info.get("kind") in ("edit", "delete", "move"):
-                    for path in info.get("locations") or []:
-                        if path not in files:
-                            files.append(path)
         view = {
             "ok": snap["state"] == "succeeded",
             "run_id": run.id, "state": snap["state"], "title": snap["title"],
@@ -252,7 +269,7 @@ class DevinPlugin:
             "duration_seconds": snap["duration_seconds"], "stop_reason": snap["stop_reason"],
             "output": snap["output"], "output_truncated": snap["output_truncated"],
             "output_chars": snap["output_chars"], "tool_calls": snap["tool_calls"],
-            "files_changed": files[:50],
+            "files_changed": snap["files_changed"],
             "permissions": snap["permissions"][-20:],
         }
         for key in ("usage", "error"):

@@ -59,7 +59,7 @@ def _isolate(tmp_path, monkeypatch):
     # Keep every temp file (prompt files, logs) inside pytest's basetemp.
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     for var in ("FAKE_DEVIN_SCENARIO", "FAKE_DEVIN_AUTH", "FAKE_DEVIN_LOG", "FAKE_DEVIN_PIDFILE",
-                "DEVIN_PERMISSION_MODE", "TERMINAL_CWD"):
+                "DEVIN_PERMISSION_MODE", "TERMINAL_CWD", "HERMES_PLATFORM", "HERMES_SESSION_PLATFORM"):
         monkeypatch.delenv(var, raising=False)
     yield
 

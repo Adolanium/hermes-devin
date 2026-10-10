@@ -277,3 +277,14 @@ def test_python_is_used_for_fake(harness):
     # Sanity: the fake runs under the same interpreter as the tests.
     h = harness()
     assert h.manager.cli_override[0] == sys.executable
+
+
+def test_desktop_sessions_get_a_live_card(harness, monkeypatch):
+    h = harness()
+    plain = h.call("delegate_to_devin", {"prompt": "x"})
+    assert "card" not in plain
+    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "desktop")
+    result = h.call("delegate_to_devin", {"prompt": "y"})
+    assert result["card"] == f'::devin-run{{id="{result["run_id"]}"}}'
+    background = h.call("delegate_to_devin", {"prompt": "z", "background": True})
+    assert background["card"] == f'::devin-run{{id="{background["run_id"]}"}}'

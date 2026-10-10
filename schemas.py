@@ -21,7 +21,8 @@ SCHEMAS: dict[str, dict] = {
             "run before it starts; Devin's permission mode is fixed by the user's plugin settings and cannot "
             "be chosen here. Use background=true for long tasks: the call returns a run_id immediately and "
             "the result is posted to the conversation when Devin finishes. Write the prompt as a complete "
-            "brief: goal, relevant files, constraints, how to verify."
+            "brief: goal, relevant files, constraints, how to verify. When a result includes `card`, put that "
+            "line alone as its own paragraph in your reply: Hermes Desktop renders it as a live card for the run."
         ),
         "parameters": {
             "type": "object",
