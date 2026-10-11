@@ -14,7 +14,7 @@ The plugin is plain Python 3.11+ with no dependencies beyond Hermes itself.
 | `runner.py` | Run manager: preflight, workers, concurrency, timeouts, notices |
 | `backends.py` | ACP and print backends |
 | `jsonrpc.py` | JSON-RPC 2.0 over stdio |
-| `process.py` | Process tree: Job Object, `taskkill`, process groups |
+| `process.py` | Process tree: Job Object, `taskkill`, process groups and tracked POSIX descendants |
 | `models.py` | Run record, states, errors, capped output |
 | `events.py` | Event envelope and fan-out |
 | `store.py` | Snapshot persistence, pruning, orphans |
@@ -41,7 +41,9 @@ cd tests
 E:\Dev\Hermes\hermes-agent\.venv\Scripts\python.exe -m pytest
 ```
 
-Pytest's scratch files go to `.pytest_tmp/` inside the plugin folder.
+Pytest's scratch files go to `.pytest_tmp/` inside the plugin folder. If you use an isolated
+test environment rather than Hermes' Python, install `psutil==7.2.2` alongside `pytest`;
+Hermes already provides it at runtime.
 
 What the suite covers:
 
@@ -49,7 +51,7 @@ What the suite covers:
 - **Runs:** foreground runs for every error code, output caps and argument checks
 - **Background:** background runs, notices, the concurrency limit and yielding
 - **Permissions:** permission modes and in-run permission requests
-- **Stopping:** interrupts, cancels, timeouts and real process-tree kills, plus mocked Windows kill paths
+- **Stopping:** interrupts, cancels, timeouts and real process-tree kills, including descendants in separate POSIX groups/sessions, normal-exit cleanup, unrelated-process protection and PID reuse, plus mocked Windows kill paths
 - **Parts:** settings, the run model, events, the store, the slash command and the dashboard API
 
 `tests/test_desktop_half.py` renders the Desktop half under Node: it loads `desktop/plugin.js` with a stub `@hermes/plugin-sdk` and the real React from a Hermes Agent install, feeds it run events and renders the card, the page and the status-bar chip, so a typo in a `jsx()` call fails here instead of in Desktop. It needs `node` and a `node_modules` with `react` and `react-dom` (set `HERMES_DESKTOP_NODE_MODULES`, or it looks in the usual Hermes install folders); otherwise it is skipped. Run it directly with `node tests/desktop_smoke.mjs <node_modules>`.
