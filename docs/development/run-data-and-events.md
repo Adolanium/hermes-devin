@@ -55,7 +55,7 @@ Each run keeps a list of progress events. Each has `seq`, `at`, `kind`, an optio
 | `tool_update` | A change to a running tool call, such as its status |
 | `diff` | A file edit as a unified diff: `edit_id`, `tool_call_id`, `path`, `patch`, `added`, `removed`, `new_file`, `truncated` |
 | `terminal` | A shell command and its output so far: `command`, `output` (the tail), `exit_code`, `status`. Updated in place while the command runs |
-| `plan` | Devin's plan, with entries and how many are done |
+| `plan` | Devin's plan, with entries and how many are done. Devin can end a run without a final plan update, so on a finished run an unfinished plan is shown as its last report, not as progress |
 | `mode` | The ACP session mode chosen or changed |
 | `permission` | An in-run permission request and its decision |
 | `usage` | Token use reported by Devin |

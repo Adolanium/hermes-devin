@@ -235,6 +235,8 @@ def test_slash_command(harness):
     assert done["run_id"] in handle("list")
     status = handle(f"status {done['run_id']}")
     assert "succeeded" in status and "plan:" in status
+    # The fake CLI ends with its plan at 1/2; a finished run must not report that as progress.
+    assert "plan: last reported 1/2 done (no later update from Devin)" in status
     assert handle("cancel all") == "No active runs."
     assert handle("bogus").startswith("/devin")
     doctor = handle("doctor")
