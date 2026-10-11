@@ -1,10 +1,12 @@
 # Approval and permissions
 
+[Documentation](../README.md)
+
 Every target requires Hermes approval to launch. The Local permission modes below do
 not govern Cloud actions. Cloud additionally requires an explicit Cloud-managed-permissions
 confirmation bound to the launch reference; its approval shows the target and selected
 repositories, platform and model preset. Closing the relay is not proof of remote
-cancellation. See [Cloud sessions](cloud-sessions.md).
+cancellation. See [Cloud sessions](../guides/cloud-sessions.md).
 
 Two separate questions decide what Devin can do:
 
@@ -54,7 +56,7 @@ conditional controls. The reference is workspace/settings-bound, expires after 1
 minutes and is consumed only after approval. It does not authorize itself. Selected
 values are part of both the approval ticket and remembered-approval identity, so an
 approval for one selection cannot authorize a different one. Raw model, target and
-permission arguments remain forbidden. See [Local model controls](model-controls.md).
+permission arguments remain forbidden. See [Local model controls](../guides/model-controls.md).
 
 ## Permission modes
 

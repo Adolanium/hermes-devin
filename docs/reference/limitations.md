@@ -1,18 +1,20 @@
 # Known limitations
 
+[Documentation](../README.md)
+
 - **Model catalogs are not entitlements.** Local model controls show current ACP choices,
   but the account may reject a model at launch. Missing pricing is unknown, not free.
   Saved values that become unavailable fail closed; they are never silently replaced.
   Cloud execution requires the separate target selector and Cloud consent, not a Local
   model selection. A live Lite/no-repository Cloud launch and confirmed cancellation
   passed. Cloud follow-ups and reconnect remain covered by fake-CLI tests, not live
-  execution. See [validation scope](cloud-sessions.md#validation-scope).
+  execution. See [validation scope](../guides/cloud-sessions.md#validation-scope).
 
 - **Cloud permissions are remote.** Local permission modes, sandboxing, fenced folders
   and per-tool approval cards do not govern Cloud actions. A relay disconnect does
   not prove remote cancellation. Unknown remote activity blocks follow-ups; a read-only
   reconnect does not prove it is idle. No arbitrary-session attach, handoff or pickup
-  is implemented. See [Cloud sessions](cloud-sessions.md).
+  is implemented. See [Cloud sessions](../guides/cloud-sessions.md).
 
 - **Concurrent runs are refused, not queued.** When `max_concurrent_runs` is reached, a new run is refused, and the model is told to wait or cancel one.
 - **Background runs outside Hermes Desktop cannot ask you anything.** There, Devin's in-run permission prompts are denied. Background runs started from Desktop ask on their run card instead, and are denied if nobody answers in time. Use `accept-edits` or a wider mode if background runs need to edit files on their own.
@@ -22,9 +24,9 @@
 - **Print mode cannot say which action it rejected.** Devin only warns on stderr that it rejected a tool call. Each warning is recorded as a denied permission without the action's name. If Devin then gives no answer, the run fails with `permission_denied`.
 - **Sandboxed modes are not on native Windows.** `sandbox: true` and `autonomous` are rejected there, matching the Devin CLI. Use WSL 2.
 - **Matching approvals.** Hermes does not pass a tool-call id to tool handlers, so the approval ticket is matched on session and arguments. Two identical calls in the same session share one ticket slot.
-- **The first instant on Windows.** A process Devin spawned before it joined its Job Object would escape the job. See [Process trees](process-tree.md#limits).
+- **The first instant on Windows.** A process Devin spawned before it joined its Job Object would escape the job. See [Process trees](../development/process-tree.md#limits).
 - **POSIX and a killed Hermes.** If Hermes is killed outright on macOS or Linux, a background run's process group is not signalled. The run is marked failed the next time the plugin starts.
-- **POSIX ancestry tracking is best-effort.** A parent that spawns and exits between observations can orphan a helper before it is recorded. Separate process groups and sessions are cleaned up once tracked; this is not OS-level containment. See [Process trees](process-tree.md#limits).
+- **POSIX ancestry tracking is best-effort.** A parent that spawns and exits between observations can orphan a helper before it is recorded. Separate process groups and sessions are cleaned up once tracked; this is not OS-level containment. See [Process trees](../development/process-tree.md#limits).
 - **Login output.** `devin auth status` output is read for clear yes/no answers. Anything the plugin does not recognise never blocks a run; Devin then reports a missing login itself.
 - **Older Desktop builds skip linked plugins.** Some Hermes Desktop builds (one from 3 October 2026, for example) do not follow a symlink or junction in `plugins/`, so a checkout linked there gets no Desktop half. Newer builds follow the link. Update Hermes Desktop, or install from Git instead.
 - **Follow-ups start after a run finishes.** A follow-up continues Devin's session from the run card once the run is done; you cannot steer a run while it works. Follow-ups need the ACP backend, and Devin must still have the session.

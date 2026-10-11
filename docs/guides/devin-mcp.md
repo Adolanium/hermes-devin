@@ -1,5 +1,7 @@
 # Devin MCP server (optional)
 
+[Documentation](../README.md)
+
 Separately from this plugin, Hermes can talk to Devin's hosted MCP server through its own MCP client. That server exposes Devin's cloud features, such as Devin sessions, the wiki and repository questions, as tools.
 
 The two do different jobs and can be used together:
