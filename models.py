@@ -229,6 +229,9 @@ class Run:
     session_key: str = ""
     # Started from a Hermes Desktop session: its run card can answer Devin's requests.
     desktop: bool = False
+    # A follow-up continues an earlier run's Devin session (ACP session/load).
+    parent_run_id: str = ""
+    resume_session_id: str = ""
     state: RunState = RunState.CREATED
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
@@ -331,6 +334,7 @@ class Run:
                 "permission_requests": len(self.permissions),
                 "pending_permissions": [dict(p) for p in self.pending_permissions.values()],
                 "desktop": self.desktop,
+                "parent_run_id": self.parent_run_id,
                 "last_activity": self._last_activity(),
             }
             if self.usage:
@@ -367,6 +371,7 @@ class Run:
                 "model": self.model,
                 "timeout_seconds": self.timeout_seconds,
                 "session_id": self.session_id,
+                "session_key": self.session_key,
                 "devin_session_id": self.devin_session_id,
                 "pid": self.pid,
                 "stop_reason": self.stop_reason,

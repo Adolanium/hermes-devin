@@ -11,7 +11,7 @@ This page follows one run from the tool call to the result, then explains why th
 5. **Devin starts.** `devin acp` is started in the chosen folder, in its own process group, and on Windows inside a Job Object. See [Process trees](process-tree.md).
 6. **The session runs.** The plugin speaks JSON-RPC over stdio:
    - `initialize`, announcing no file-system or terminal capabilities, so Devin uses its own tools
-   - `session/new` with the working directory
+   - `session/new` with the working directory, or `session/load` for a follow-up, which continues an earlier run's Devin session. The conversation Devin replays on load is not added to the new run
    - `session/set_mode` when Devin advertises a mode matching the configured permission mode. A mode is matched by exact id or name. If Devin advertises modes but none matches, the run is refused.
    - `session/prompt` with the task
 7. **Progress streams in.** `session/update` notifications become run events: message and thought chunks, tool calls with their kind and file locations, plan updates, mode changes and usage. Devin's `session/request_permission` calls are answered by the plugin. See [Approval and permissions](approval-and-permissions.md#devins-own-permission-prompts).

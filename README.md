@@ -55,6 +55,7 @@ In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands 
 - recent tool calls and every permission decision
 - elapsed time, token use, the final answer or the error
 - a **Stop** button that ends the run and everything it started
+- a **Tell Devin…** box under a finished run: your follow-up continues the same Devin session, so Devin remembers the work, and it appears as the next card in the thread
 
 A **Devin** page in the sidebar lists active runs and history, a status-bar chip shows while Devin is working, and you get a notification when a run finishes, even if you've switched to another app.
 

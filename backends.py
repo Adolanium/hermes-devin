@@ -212,6 +212,8 @@ class AcpBackend:
         self._peer: JsonRpcPeer | None = None
         # Set by tool activity: Devin's next message text starts a new paragraph.
         self._paragraph_break = False
+        # True while session/load replays an earlier conversation, which is not this run's output.
+        self._replaying = False
 
     # -- argv / env -----------------------------------------------------------
 
@@ -228,6 +230,8 @@ class AcpBackend:
     # -- protocol callbacks -------------------------------------------------
 
     def _on_update(self, io: RunIO, params: dict) -> None:
+        if self._replaying:
+            return
         update = params.get("update") if isinstance(params.get("update"), dict) else {}
         kind = update.get("sessionUpdate")
         run = io.run
@@ -299,6 +303,32 @@ class AcpBackend:
             title = update.get("title")
             if isinstance(title, str) and title:
                 io.emit("status", f"session title: {title}")
+
+    def _load_session(self, io: RunIO, peer: JsonRpcPeer, session_id: str, timeout: float) -> dict:
+        """Resume an earlier Devin session (a follow-up) without replaying it into this run.
+
+        ``session/load`` replays the old conversation as ``session/update``
+        notifications. They are dropped until a throwaway request comes back:
+        the peer handles notifications in order on its reader thread, so by then
+        every replayed update has been seen.
+        """
+        self._replaying = True
+        try:
+            try:
+                session = peer.request("session/load", {"sessionId": session_id, "cwd": io.run.cwd,
+                                                        "mcpServers": []}, timeout=timeout)
+            except RpcError as exc:
+                raise RuntimeError(f"Devin could not resume session {session_id}: {exc.message}") from exc
+            try:
+                peer.request("_hermes_devin/replay_barrier", {}, timeout=10)
+            except (RpcError, TimeoutError):
+                pass
+        finally:
+            self._replaying = False
+        session = dict(session) if isinstance(session, dict) else {}
+        session.setdefault("sessionId", session_id)
+        io.emit("status", f"resumed Devin session {session_id}")
+        return session
 
     def _capture_content(self, io: RunIO, call_id: str, info: dict, update: dict) -> None:
         """Turn a tool call's content into live views: file diffs and shell output.
@@ -471,7 +501,11 @@ class AcpBackend:
                 io.emit("status", "connected", protocol_version=init.get("protocolVersion"),
                         agent=agent.get("name") if isinstance(agent, dict) else None,
                         agent_version=agent.get("version") if isinstance(agent, dict) else None)
-            session = peer.request("session/new", {"cwd": io.run.cwd, "mcpServers": []}, timeout=budget())
+            resume = io.run.resume_session_id
+            if resume:
+                session = self._load_session(io, peer, resume, budget())
+            else:
+                session = peer.request("session/new", {"cwd": io.run.cwd, "mcpServers": []}, timeout=budget())
             if not isinstance(session, dict) or not session.get("sessionId"):
                 raise RpcError(-32603, "session/new returned no sessionId")
             self._session_id = str(session["sessionId"])

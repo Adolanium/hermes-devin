@@ -90,6 +90,8 @@ Delivery is best effort and never fails a run. Message and thought chunks are co
 - `GET /runs?state=active|finished|all&limit=50`: run summaries, newest first
 - `GET /runs/{run_id}?output=true`: one snapshot with its last 60 events. Output is left out unless asked for, and the prompt is never included.
 - `POST /runs/{run_id}/cancel`: stop a run, like `devin_cancel_run`.
+- `POST /runs/{run_id}/permissions/{ask_id}` with `{"allow": true|false}`: answer a request waiting on the run card.
+- `POST /runs/{run_id}/follow-up` with `{"prompt": "..."}`: start a follow-up run that continues the run's Devin session. The run must be finished and on the ACP backend. Sending the message on the card is the approval; the follow-up runs in the background, reports to the same chat, and records `parent_run_id`.
 
 It prefers the live run manager when the agent half runs in the same process, which is the case for `hermes serve`, the backend Hermes Desktop talks to. Otherwise it reads the stored snapshots, and cancel answers `409` with a hint to ask Hermes or use `/devin cancel`. Run ids are validated before any file is touched.
 

@@ -250,6 +250,18 @@ class Agent:
                         {"id": "normal", "name": "Normal"}, {"id": "accept-edits", "name": "Accept Edits"},
                         {"id": "plan", "name": "Plan"}, {"id": "bypass", "name": "Bypass"}]}
                 send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": self.session, "modes": modes}})
+            elif method == "session/load":
+                wanted = str((msg.get("params") or {}).get("sessionId") or "")
+                if wanted == "missing-session":
+                    send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32002, "message": "Session not found"}})
+                    continue
+                # Like Devin: the old conversation is replayed before the reply.
+                self.session = wanted
+                update(wanted, {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "old ask"}})
+                text_chunk(wanted, "REPLAYED OLD ANSWER")
+                send({"jsonrpc": "2.0", "id": rid, "result": {"modes": {"currentModeId": "normal", "availableModes": [
+                    {"id": "normal", "name": "Normal"}, {"id": "accept-edits", "name": "Accept Edits"},
+                    {"id": "plan", "name": "Plan"}, {"id": "bypass", "name": "Bypass"}]}}})
             elif method == "session/set_mode":
                 send({"jsonrpc": "2.0", "id": rid, "result": {}})
             elif method == "session/prompt":
