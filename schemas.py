@@ -28,12 +28,19 @@ SCHEMAS: dict[str, dict] = {
             "type": "object",
             "properties": {
                 "prompt": {"type": "string", "description": "The full task for Devin."},
-                "cwd": {"type": "string",
-                        "description": "Working directory for Devin. Defaults to the current workspace."},
-                "background": {"type": "boolean",
-                               "description": "Start without waiting; you are notified on completion."},
-                "timeout_seconds": {"type": "integer", "minimum": 10,
-                                    "description": "Stop Devin after this many seconds (capped by settings)."},
+                "cwd": {
+                    "type": "string",
+                    "description": "Working directory for Devin. Defaults to the current workspace.",
+                },
+                "background": {
+                    "type": "boolean",
+                    "description": "Start without waiting; you are notified on completion.",
+                },
+                "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "description": "Stop Devin after this many seconds (capped by settings).",
+                },
                 "title": {"type": "string", "description": "Short label for listings (optional)."},
             },
             "required": ["prompt"],
@@ -46,9 +53,11 @@ SCHEMAS: dict[str, dict] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "state": {"type": "string",
-                          "enum": ["active", "finished", "all"],
-                          "description": "Filter by state (default all)."},
+                "state": {
+                    "type": "string",
+                    "enum": ["active", "finished", "all"],
+                    "description": "Filter by state (default all).",
+                },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Max runs (default 10)."},
             },
             "additionalProperties": False,
@@ -61,8 +70,12 @@ SCHEMAS: dict[str, dict] = {
             "type": "object",
             "properties": {
                 "run_id": _RUN_ID,
-                "events": {"type": "integer", "minimum": 0, "maximum": 100,
-                           "description": "How many recent progress events to include (default 10)."},
+                "events": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "How many recent progress events to include (default 10).",
+                },
             },
             "required": ["run_id"],
             "additionalProperties": False,
@@ -75,8 +88,11 @@ SCHEMAS: dict[str, dict] = {
             "type": "object",
             "properties": {
                 "run_id": _RUN_ID,
-                "max_chars": {"type": "integer", "minimum": 500,
-                              "description": "Cap on returned output characters (default from settings)."},
+                "max_chars": {
+                    "type": "integer",
+                    "minimum": 500,
+                    "description": "Cap on returned output characters (default from settings).",
+                },
             },
             "required": ["run_id"],
             "additionalProperties": False,

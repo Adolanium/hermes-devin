@@ -112,8 +112,9 @@ def resolve_cwd(cfg: DevinConfig, requested: str | None) -> str:
             if path == root_path or root_path in path.parents:
                 break
         else:
-            raise RunRefused("cwd_not_allowed",
-                             f"{path} is outside the directories allowed by allowed_roots in the plugin settings")
+            raise RunRefused(
+                "cwd_not_allowed", f"{path} is outside the directories allowed by allowed_roots in the plugin settings"
+            )
     return str(path)
 
 
@@ -165,13 +166,22 @@ class _RunIO:
         run = self.run
         with run._lock:
             last = run.events[-1] if run.events else None
-            if last is not None and kind in ("message", "thought") and last.kind == kind and not data \
-                    and len(last.text) + len(text) <= 4000:
+            if (
+                last is not None
+                and kind in ("message", "thought")
+                and last.kind == kind
+                and not data
+                and len(last.text) + len(text) <= 4000
+            ):
                 last.text += text
                 last.at = time.time()
                 event = last
-            elif last is not None and kind == "terminal" and last.kind == kind \
-                    and last.data.get("tool_call_id") == data.get("tool_call_id"):
+            elif (
+                last is not None
+                and kind == "terminal"
+                and last.kind == kind
+                and last.data.get("tool_call_id") == data.get("tool_call_id")
+            ):
                 # A running command's output grows in place: one event per command.
                 last.text, last.at = text[:4000], time.time()
                 last.data = {k: v for k, v in data.items() if v is not None}
@@ -191,8 +201,9 @@ class _RunIO:
             self.manager._persist(self.run, force=True)
 
     def spawn(self, argv: list[str], *, stdin_pipe: bool) -> ProcessTree:
-        tree = self.manager._spawn(argv, cwd=self.run.cwd, env=self.env,
-                                   stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL)
+        tree = self.manager._spawn(
+            argv, cwd=self.run.cwd, env=self.env, stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL
+        )
         with self.run._lock:
             self.run.pid = tree.pid
         return tree
@@ -213,8 +224,9 @@ class _RunIO:
         self.record_permission(title, kind, allowed, reason, request_id=str(detail.get("tool_call_id") or ""))
         return allowed, reason
 
-    def _pending(self, title: str, kind: str, via: str, expires_at: float | None = None,
-                 card_ask: _PermissionAsk | None = None) -> str:
+    def _pending(
+        self, title: str, kind: str, via: str, expires_at: float | None = None, card_ask: _PermissionAsk | None = None
+    ) -> str:
         """Show a request as waiting (on the run card and in every event) and return its id.
 
         A ``card_ask`` is registered before anyone can see the request, so an answer never races it.
@@ -223,10 +235,14 @@ class _RunIO:
         if card_ask is not None:
             self.card_asks[ask_id] = card_ask
         with self.run._lock:
-            self.run.pending_permissions[ask_id] = {"ask_id": ask_id, "title": title[:300], "kind": kind,
-                                                    "via": via, "expires_at": expires_at}
-            event = self.run.add_event("permission_request", title[:200], ask_id=ask_id, permission_kind=kind,
-                                       via=via)
+            self.run.pending_permissions[ask_id] = {
+                "ask_id": ask_id,
+                "title": title[:300],
+                "kind": kind,
+                "via": via,
+                "expires_at": expires_at,
+            }
+            event = self.run.add_event("permission_request", title[:200], ask_id=ask_id, permission_kind=kind, via=via)
         self.manager._publish("run.permission", self.run, event)
         return ask_id
 
@@ -269,12 +285,18 @@ class _RunIO:
 
     def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *, request_id: str = "") -> None:
         decision = PermissionDecision(
-            request_id=request_id, title=title[:300], kind=kind,
-            decision="allowed" if allowed else "denied", reason=reason, at=time.time())
+            request_id=request_id,
+            title=title[:300],
+            kind=kind,
+            decision="allowed" if allowed else "denied",
+            reason=reason,
+            at=time.time(),
+        )
         with self.run._lock:
             self.run.permissions.append(decision)
-            event = self.run.add_event("permission", f"{decision.decision}: {title[:200]}",
-                                       permission_kind=kind, reason=reason)
+            event = self.run.add_event(
+                "permission", f"{decision.decision}: {title[:200]}", permission_kind=kind, reason=reason
+            )
         self.manager._publish("run.permission", self.run, event)
 
 
@@ -285,12 +307,18 @@ Gate = Callable[[str, str, str], dict]
 
 
 class RunManager:
-    def __init__(self, *, bus: EventBus, store: RunStore,
-                 spawn: Callable[..., ProcessTree] | None = None,
-                 which: Callable[[str], str | None] = shutil.which,
-                 auth_check: Callable[[list[str]], AuthStatus] | None = None,
-                 injector: Callable[[str, str | None], bool] | None = None,
-                 temp_dir: str | None = None, cli_override: list[str] | None = None):
+    def __init__(
+        self,
+        *,
+        bus: EventBus,
+        store: RunStore,
+        spawn: Callable[..., ProcessTree] | None = None,
+        which: Callable[[str], str | None] = shutil.which,
+        auth_check: Callable[[list[str]], AuthStatus] | None = None,
+        injector: Callable[[str, str | None], bool] | None = None,
+        temp_dir: str | None = None,
+        cli_override: list[str] | None = None,
+    ):
         self.bus = bus
         self.store = store
         self._spawn_impl = spawn or (lambda argv, **kw: ProcessTree(argv, **kw))
@@ -342,8 +370,10 @@ class RunManager:
     def _capacity_message(active: list[Run], cfg: DevinConfig) -> str | None:
         if len(active) >= cfg.max_concurrent_runs:
             ids = ", ".join(r.id for r in active)
-            return (f"{len(active)} Devin run(s) already active ({ids}); the limit is "
-                    f"max_concurrent_runs={cfg.max_concurrent_runs}. Wait for one to finish or cancel it.")
+            return (
+                f"{len(active)} Devin run(s) already active ({ids}); the limit is "
+                f"max_concurrent_runs={cfg.max_concurrent_runs}. Wait for one to finish or cancel it."
+            )
         return None
 
     # -- preflight -------------------------------------------------------------
@@ -361,30 +391,58 @@ class RunManager:
         if cfg.preflight_auth_check and time.monotonic() >= self._auth_ok_until:
             status = self._auth_check(argv)
             if status.ok is False:
-                raise RunRefused(ErrorCode.NOT_LOGGED_IN.value,
-                                 "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try "
-                                 f"again. (devin auth status: {status.detail[:200]})")
+                raise RunRefused(
+                    ErrorCode.NOT_LOGGED_IN.value,
+                    "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try "
+                    f"again. (devin auth status: {status.detail[:200]})",
+                )
             if status.ok:
                 self._auth_ok_until = time.monotonic() + AUTH_CACHE_SECONDS
         return argv
 
     # -- start -------------------------------------------------------------------
 
-    def start(self, cfg: DevinConfig, *, prompt: str, cwd: str, background: bool, timeout_seconds: int,
-              title: str, approval: ApprovalRecord, session_id: str = "", task_id: str = "",
-              session_key: str = "", argv: list[str] | None = None, desktop: bool = False,
-              parent_run_id: str = "", resume_session_id: str = "") -> Run:
+    def start(
+        self,
+        cfg: DevinConfig,
+        *,
+        prompt: str,
+        cwd: str,
+        background: bool,
+        timeout_seconds: int,
+        title: str,
+        approval: ApprovalRecord,
+        session_id: str = "",
+        task_id: str = "",
+        session_key: str = "",
+        argv: list[str] | None = None,
+        desktop: bool = False,
+        parent_run_id: str = "",
+        resume_session_id: str = "",
+    ) -> Run:
         if self._closed:
             raise RunRefused("shutting_down", "The Devin plugin is shutting down")
         argv = argv if argv is not None else self.preflight(cfg)
         self._history_limit = cfg.history_limit
         run = Run(
-            id=new_run_id(), prompt=prompt, title=title or _title_from(prompt), cwd=cwd,
-            backend=cfg.backend, permission_mode=cfg.permission_mode, model=cfg.model,
-            background=background, timeout_seconds=timeout_seconds, session_id=session_id,
-            task_id=task_id, session_key=session_key, approval=approval, desktop=desktop,
-            parent_run_id=parent_run_id, resume_session_id=resume_session_id,
-            max_events=cfg.max_progress_events, output=CappedText(cfg.max_output_chars),
+            id=new_run_id(),
+            prompt=prompt,
+            title=title or _title_from(prompt),
+            cwd=cwd,
+            backend=cfg.backend,
+            permission_mode=cfg.permission_mode,
+            model=cfg.model,
+            background=background,
+            timeout_seconds=timeout_seconds,
+            session_id=session_id,
+            task_id=task_id,
+            session_key=session_key,
+            approval=approval,
+            desktop=desktop,
+            parent_run_id=parent_run_id,
+            resume_session_id=resume_session_id,
+            max_events=cfg.max_progress_events,
+            output=CappedText(cfg.max_output_chars),
         )
         env = self._child_env(cfg)
         io = _RunIO(self, run, cfg, argv, env)
@@ -397,8 +455,7 @@ class RunManager:
             self._prune_locked()
         self._publish("run.created", run)
         self._persist(run, force=True)
-        thread = threading.Thread(target=self._worker, args=(run, io, cfg), name=f"devin-run-{run.id}",
-                                  daemon=True)
+        thread = threading.Thread(target=self._worker, args=(run, io, cfg), name=f"devin-run-{run.id}", daemon=True)
         with self._lock:
             self._threads[run.id] = thread
         thread.start()
@@ -422,7 +479,7 @@ class RunManager:
     def _prune_locked(self) -> None:
         finished = [r for r in self._runs.values() if not r.active]
         finished.sort(key=lambda r: r.created_at, reverse=True)
-        for run in finished[self._history_limit:]:
+        for run in finished[self._history_limit :]:
             self._runs.pop(run.id, None)
             self._io.pop(run.id, None)
             self._threads.pop(run.id, None)
@@ -432,18 +489,21 @@ class RunManager:
         outcome: Outcome
         try:
             if io.cancel_event.is_set():
-                outcome = Outcome(RunState.CANCELLED, error=RunError(ErrorCode.CANCELLED.value,
-                                                                     f"Run stopped: {io.cancel_reason()}"))
+                outcome = Outcome(
+                    RunState.CANCELLED, error=RunError(ErrorCode.CANCELLED.value, f"Run stopped: {io.cancel_reason()}")
+                )
             else:
                 run.transition(RunState.STARTING)
                 self._publish("run.state", run)
                 outcome = backend.execute(io)
         except FileNotFoundError as exc:
-            outcome = Outcome(RunState.FAILED, error=RunError(ErrorCode.CLI_NOT_FOUND.value,
-                                                              f"Could not start Devin: {exc}"))
+            outcome = Outcome(
+                RunState.FAILED, error=RunError(ErrorCode.CLI_NOT_FOUND.value, f"Could not start Devin: {exc}")
+            )
         except OSError as exc:
-            outcome = Outcome(RunState.FAILED, error=RunError(ErrorCode.SPAWN_FAILED.value,
-                                                              f"Could not start Devin: {exc}"))
+            outcome = Outcome(
+                RunState.FAILED, error=RunError(ErrorCode.SPAWN_FAILED.value, f"Could not start Devin: {exc}")
+            )
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("devin: run %s crashed", run.id)
             outcome = Outcome(RunState.FAILED, error=RunError(ErrorCode.INTERNAL.value, f"internal error: {exc}"))
@@ -507,9 +567,16 @@ class RunManager:
             io.cancel(reason)
         return run
 
-    def wait_foreground(self, run: Run, *, interrupted: Callable[[], bool], gate: Gate | None = None,
-                        yield_requested: Callable[[], bool] | None = None,
-                        session_key: Callable[[], str] = lambda: "", poll: float = 0.2) -> str:
+    def wait_foreground(
+        self,
+        run: Run,
+        *,
+        interrupted: Callable[[], bool],
+        gate: Gate | None = None,
+        yield_requested: Callable[[], bool] | None = None,
+        session_key: Callable[[], str] = lambda: "",
+        poll: float = 0.2,
+    ) -> str:
         """Block until ``run`` finishes. Relays Devin's permission prompts to ``gate``;
         an interrupt cancels the run and waits for the tree to be gone. When Hermes
         asks the tool to yield (the user sent a message mid-turn), the run keeps
@@ -549,13 +616,15 @@ class RunManager:
                     ask.answer = (False, "no approval gate")
                 else:
                     from .approval import ask_gate
-                    reason = (f"Devin run {run.id} asks to: {ask.title[:300]} (kind: {ask.kind}) "
-                              f"in {run.cwd}")
+
+                    reason = f"Devin run {run.id} asks to: {ask.title[:300]} (kind: {ask.kind}) in {run.cwd}"
                     digest = hashlib.sha256(f"{run.cwd}\x1f{ask.title}".encode()).hexdigest()[:16]
                     rule = f"devin:perm:{run.permission_mode}:{ask.kind}:{digest}"
                     ok, msg, choice = ask_gate(gate, reason, rule)
-                    ask.answer = (ok, f"user {'approved' if ok else 'denied'} ({choice})" if ok or not msg
-                                  else msg[:200])
+                    ask.answer = (
+                        ok,
+                        f"user {'approved' if ok else 'denied'} ({choice})" if ok or not msg else msg[:200],
+                    )
                 ask.done.set()
         finally:
             io.interactive.clear()
@@ -583,8 +652,9 @@ class RunManager:
         except Exception:
             logger.debug("devin: completion notice failed", exc_info=True)
             delivered = False
-        event = run.add_event("status", "completion notice delivered" if delivered
-                              else "completion notice could not be delivered")
+        event = run.add_event(
+            "status", "completion notice delivered" if delivered else "completion notice could not be delivered"
+        )
         self._publish("run.progress", run, event)
         self._persist(run, force=True)
 

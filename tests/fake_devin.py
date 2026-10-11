@@ -40,6 +40,7 @@ def spawn_grandchild() -> None:
 
 # --- auth -----------------------------------------------------------------------
 
+
 def auth_status() -> int:
     mode = os.environ.get("FAKE_DEVIN_AUTH", "ok")
     if mode == "ok":
@@ -54,13 +55,13 @@ def auth_status() -> int:
 
 # --- print mode -------------------------------------------------------------------
 
+
 def print_mode(argv: list[str]) -> int:
     prompt = ""
     if "--prompt-file" in argv:
         with open(argv[argv.index("--prompt-file") + 1], encoding="utf-8") as fh:
             prompt = fh.read()
-    log({"mode": "print", "argv": argv, "prompt": prompt,
-         "env_mode": os.environ.get("DEVIN_PERMISSION_MODE")})
+    log({"mode": "print", "argv": argv, "prompt": prompt, "env_mode": os.environ.get("DEVIN_PERMISSION_MODE")})
     if SCENARIO == "auth":
         print("Error: not logged in. Run devin auth login.", file=sys.stderr)
         return 1
@@ -89,8 +90,12 @@ def print_mode(argv: list[str]) -> int:
         if SCENARIO == "print_rejected_partial":
             print("Read the code; could not run the tests.", flush=True)
         for _ in range(2):
-            print("warning: rejected a tool call that requires confirmation. Running in non-interactive mode. "
-                  "Use --permission-mode dangerous to auto-approve all tools.", file=sys.stderr, flush=True)
+            print(
+                "warning: rejected a tool call that requires confirmation. Running in non-interactive mode. "
+                "Use --permission-mode dangerous to auto-approve all tools.",
+                file=sys.stderr,
+                flush=True,
+            )
         return 0
     print(f"Done: {prompt[:40]}", flush=True)
     print("All tests pass.", flush=True)
@@ -98,6 +103,7 @@ def print_mode(argv: list[str]) -> int:
 
 
 # --- ACP -------------------------------------------------------------------------
+
 
 def send(msg: dict) -> None:
     with _write_lock:
@@ -140,25 +146,53 @@ class Agent:
             return
         if SCENARIO == "two_messages":
             text_chunk(sid, "I'll look first.")
-        update(sid, {"sessionUpdate": "plan", "entries": [
-            {"content": "read code", "status": "completed", "priority": "high"},
-            {"content": "fix bug", "status": "in_progress", "priority": "high"}]})
-        update(sid, {"sessionUpdate": "tool_call", "toolCallId": "t1", "title": "Edit app.py", "kind": "edit",
-                     "status": "pending", "locations": [{"path": "app.py"}]})
+        update(
+            sid,
+            {
+                "sessionUpdate": "plan",
+                "entries": [
+                    {"content": "read code", "status": "completed", "priority": "high"},
+                    {"content": "fix bug", "status": "in_progress", "priority": "high"},
+                ],
+            },
+        )
+        update(
+            sid,
+            {
+                "sessionUpdate": "tool_call",
+                "toolCallId": "t1",
+                "title": "Edit app.py",
+                "kind": "edit",
+                "status": "pending",
+                "locations": [{"path": "app.py"}],
+            },
+        )
         if SCENARIO == "permission":
-            answer = self.request("session/request_permission", {
-                "sessionId": sid,
-                "toolCall": {"toolCallId": "t2", "title": "Run `rm -rf build`", "kind": "execute"},
-                "options": [{"optionId": "yes", "name": "Allow", "kind": "allow_once"},
-                            {"optionId": "always", "name": "Always", "kind": "allow_always"},
-                            {"optionId": "no", "name": "Reject", "kind": "reject_once"}]})
+            answer = self.request(
+                "session/request_permission",
+                {
+                    "sessionId": sid,
+                    "toolCall": {"toolCallId": "t2", "title": "Run `rm -rf build`", "kind": "execute"},
+                    "options": [
+                        {"optionId": "yes", "name": "Allow", "kind": "allow_once"},
+                        {"optionId": "always", "name": "Always", "kind": "allow_always"},
+                        {"optionId": "no", "name": "Reject", "kind": "reject_once"},
+                    ],
+                },
+            )
             outcome = (answer.get("result") or {}).get("outcome") or {}
             text_chunk(sid, f"permission outcome: {outcome.get('outcome')}:{outcome.get('optionId')}\n")
-            answer2 = self.request("session/request_permission", {
-                "sessionId": sid,
-                "toolCall": {"toolCallId": "t3", "title": "Edit main.py", "kind": "edit"},
-                "options": [{"optionId": "y", "name": "Allow", "kind": "allow_once"},
-                            {"optionId": "n", "name": "Reject", "kind": "reject_once"}]})
+            answer2 = self.request(
+                "session/request_permission",
+                {
+                    "sessionId": sid,
+                    "toolCall": {"toolCallId": "t3", "title": "Edit main.py", "kind": "edit"},
+                    "options": [
+                        {"optionId": "y", "name": "Allow", "kind": "allow_once"},
+                        {"optionId": "n", "name": "Reject", "kind": "reject_once"},
+                    ],
+                },
+            )
             outcome2 = (answer2.get("result") or {}).get("outcome") or {}
             text_chunk(sid, f"edit outcome: {outcome2.get('optionId')}\n")
         update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"})
@@ -166,32 +200,105 @@ class Agent:
             # Shapes captured from Devin CLI 3000.11.3: an edit with old and new text, a new file
             # (no oldText), and a command whose output arrives as a growing snapshot.
             path = os.path.join(os.getcwd(), "calc.py")
-            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "e1", "title": "Edit file", "kind": "edit",
-                         "content": [{"type": "diff", "path": path, "oldText": "def add(a, b):\n    return a + b\n",
-                                      "newText": "def add(a: int, b: int) -> int:\n    return a + b\n"}]})
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "e1",
+                    "title": "Edit file",
+                    "kind": "edit",
+                    "content": [
+                        {
+                            "type": "diff",
+                            "path": path,
+                            "oldText": "def add(a, b):\n    return a + b\n",
+                            "newText": "def add(a: int, b: int) -> int:\n    return a + b\n",
+                        }
+                    ],
+                },
+            )
             update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "e1", "status": "completed"})
-            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "e2", "title": "Write file", "kind": "edit",
-                         "content": [{"type": "diff", "path": os.path.join(os.getcwd(), "notes.md"),
-                                      "newText": "# Notes\n"}]})
-            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "x1", "title": "Ran pytest", "kind": "execute",
-                         "rawInput": {"command": "pytest -q"}})
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "e2",
+                    "title": "Write file",
+                    "kind": "edit",
+                    "content": [
+                        {"type": "diff", "path": os.path.join(os.getcwd(), "notes.md"), "newText": "# Notes\n"}
+                    ],
+                },
+            )
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "x1",
+                    "title": "Ran pytest",
+                    "kind": "execute",
+                    "rawInput": {"command": "pytest -q"},
+                },
+            )
             for upto in (1, 2, 3):
-                update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "x1", "status": "in_progress",
-                             "content": [{"type": "content", "content": {
-                                 "type": "text", "text": "\n".join(f"line {i}" for i in range(upto))}}]})
-            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "x1", "status": "in_progress",
-                         "_meta": {"terminal_exit": {"exit_code": 1}}})
+                update(
+                    sid,
+                    {
+                        "sessionUpdate": "tool_call_update",
+                        "toolCallId": "x1",
+                        "status": "in_progress",
+                        "content": [
+                            {
+                                "type": "content",
+                                "content": {"type": "text", "text": "\n".join(f"line {i}" for i in range(upto))},
+                            }
+                        ],
+                    },
+                )
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "x1",
+                    "status": "in_progress",
+                    "_meta": {"terminal_exit": {"exit_code": 1}},
+                },
+            )
             update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "x1", "status": "completed"})
             update(sid, {"sessionUpdate": "tool_call", "toolCallId": "r1", "title": "Read file", "kind": "read"})
-            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "r1", "status": "completed",
-                         "content": [{"type": "content", "content": {"type": "text", "text": "6 lines"}}]})
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "r1",
+                    "status": "completed",
+                    "content": [{"type": "content", "content": {"type": "text", "text": "6 lines"}}],
+                },
+            )
         if SCENARIO == "diff_edit":
             # Real Devin names edited files only in diff content, never in locations.
-            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "t4", "title": "Wrote util.py", "kind": "edit",
-                         "content": [{"type": "diff", "path": "util.py", "newText": "x = 1"}]})
-            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "t4", "status": "completed",
-                         "content": [{"type": "diff", "path": "util.py", "newText": "x = 1"},
-                                     {"type": "diff", "path": "README.md", "newText": "y"}]})
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "t4",
+                    "title": "Wrote util.py",
+                    "kind": "edit",
+                    "content": [{"type": "diff", "path": "util.py", "newText": "x = 1"}],
+                },
+            )
+            update(
+                sid,
+                {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "t4",
+                    "status": "completed",
+                    "content": [
+                        {"type": "diff", "path": "util.py", "newText": "x = 1"},
+                        {"type": "diff", "path": "README.md", "newText": "y"},
+                    ],
+                },
+            )
         if SCENARIO in ("slow", "hang", "spawn_child"):
             if SCENARIO == "spawn_child":
                 spawn_grandchild()
@@ -211,10 +318,25 @@ class Agent:
         else:
             text_chunk(sid, "Fixed the bug in app.py. ")
             text_chunk(sid, f"Task was: {prompt[:30]}")
-        update(sid, {"sessionUpdate": "usage_update", "used": 1200, "size": 200000,
-                     "cost": {"amount": 0.42, "currency": "USD"}})
-        send({"jsonrpc": "2.0", "id": rid, "result": {
-            "stopReason": "end_turn", "usage": {"inputTokens": 1000, "outputTokens": 200, "totalTokens": 1200}}})
+        update(
+            sid,
+            {
+                "sessionUpdate": "usage_update",
+                "used": 1200,
+                "size": 200000,
+                "cost": {"amount": 0.42, "currency": "USD"},
+            },
+        )
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": rid,
+                "result": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1000, "outputTokens": 200, "totalTokens": 1200},
+                },
+            }
+        )
 
     def serve(self) -> int:
         for line in sys.stdin:
@@ -222,8 +344,7 @@ class Agent:
             if not line:
                 continue
             msg = json.loads(line)
-            log({"mode": "acp", "msg": msg, "env_mode": os.environ.get("DEVIN_PERMISSION_MODE"),
-                 "argv": sys.argv[1:]})
+            log({"mode": "acp", "msg": msg, "env_mode": os.environ.get("DEVIN_PERMISSION_MODE"), "argv": sys.argv[1:]})
             method = msg.get("method")
             rid = msg.get("id")
             if method is None:
@@ -232,23 +353,45 @@ class Agent:
                     self.response_ready.notify_all()
                 continue
             if method == "initialize":
-                send({"jsonrpc": "2.0", "id": rid, "result": {
-                    "protocolVersion": 1, "agentCapabilities": {}, "authMethods": [],
-                    "agentInfo": {"name": "fake-devin", "version": "0.0.1"}}})
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rid,
+                        "result": {
+                            "protocolVersion": 1,
+                            "agentCapabilities": {},
+                            "authMethods": [],
+                            "agentInfo": {"name": "fake-devin", "version": "0.0.1"},
+                        },
+                    }
+                )
             elif method == "session/new":
                 if SCENARIO == "auth":
                     send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": "Authentication required"}})
                     continue
                 if SCENARIO == "devin_modes":
                     # What Devin CLI 3000.x advertises: no mode that asks before edits.
-                    modes = {"currentModeId": "accept-edits", "availableModes": [
-                        {"id": "accept-edits", "name": "Code"}, {"id": "smart", "name": "Smart"},
-                        {"id": "ask", "name": "Ask"}, {"id": "plan", "name": "Plan"},
-                        {"id": "bypass", "name": "Bypass Permissions"}, {"id": "autonomous-x", "name": "Auto Pilot"}]}
+                    modes = {
+                        "currentModeId": "accept-edits",
+                        "availableModes": [
+                            {"id": "accept-edits", "name": "Code"},
+                            {"id": "smart", "name": "Smart"},
+                            {"id": "ask", "name": "Ask"},
+                            {"id": "plan", "name": "Plan"},
+                            {"id": "bypass", "name": "Bypass Permissions"},
+                            {"id": "autonomous-x", "name": "Auto Pilot"},
+                        ],
+                    }
                 else:
-                    modes = {"currentModeId": "normal", "availableModes": [
-                        {"id": "normal", "name": "Normal"}, {"id": "accept-edits", "name": "Accept Edits"},
-                        {"id": "plan", "name": "Plan"}, {"id": "bypass", "name": "Bypass"}]}
+                    modes = {
+                        "currentModeId": "normal",
+                        "availableModes": [
+                            {"id": "normal", "name": "Normal"},
+                            {"id": "accept-edits", "name": "Accept Edits"},
+                            {"id": "plan", "name": "Plan"},
+                            {"id": "bypass", "name": "Bypass"},
+                        ],
+                    }
                 send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": self.session, "modes": modes}})
             elif method == "session/load":
                 wanted = str((msg.get("params") or {}).get("sessionId") or "")
@@ -259,14 +402,27 @@ class Agent:
                 self.session = wanted
                 update(wanted, {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "old ask"}})
                 text_chunk(wanted, "REPLAYED OLD ANSWER")
-                send({"jsonrpc": "2.0", "id": rid, "result": {"modes": {"currentModeId": "normal", "availableModes": [
-                    {"id": "normal", "name": "Normal"}, {"id": "accept-edits", "name": "Accept Edits"},
-                    {"id": "plan", "name": "Plan"}, {"id": "bypass", "name": "Bypass"}]}}})
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rid,
+                        "result": {
+                            "modes": {
+                                "currentModeId": "normal",
+                                "availableModes": [
+                                    {"id": "normal", "name": "Normal"},
+                                    {"id": "accept-edits", "name": "Accept Edits"},
+                                    {"id": "plan", "name": "Plan"},
+                                    {"id": "bypass", "name": "Bypass"},
+                                ],
+                            }
+                        },
+                    }
+                )
             elif method == "session/set_mode":
                 send({"jsonrpc": "2.0", "id": rid, "result": {}})
             elif method == "session/prompt":
-                threading.Thread(target=self.handle_prompt, args=(rid, msg.get("params") or {}),
-                                 daemon=True).start()
+                threading.Thread(target=self.handle_prompt, args=(rid, msg.get("params") or {}), daemon=True).start()
             elif method == "session/cancel":
                 self.cancelled.set()
             elif rid is not None:

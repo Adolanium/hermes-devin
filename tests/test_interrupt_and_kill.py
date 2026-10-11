@@ -49,8 +49,7 @@ def test_interrupt_hard_kills_agent_that_ignores_cancel(harness):
     steps = result["kill_report"]["steps"]
     # The protocol-level cancel was ignored, so the stop escalated past it.
     assert steps[0] == "soft_stop"
-    assert any(s in steps for s in ("sigterm_group", "terminate_job")) or \
-        result["kill_report"]["method"] == "taskkill"
+    assert any(s in steps for s in ("sigterm_group", "terminate_job")) or result["kill_report"]["method"] == "taskkill"
     assert result["kill_report"]["method"] in ("job_object", "taskkill", "process_group")
     assert h.spawned[0].poll() is not None
 
@@ -291,8 +290,15 @@ def test_taskkill_command_line(monkeypatch):
 def test_real_job_object_is_created_on_windows(harness):
     h = harness(scenario="hang")
     cfg = h.config.load()
-    run = h.manager.start(cfg, prompt="x", cwd=str(h.workdir), background=True, timeout_seconds=60, title="t",
-                          approval=models.ApprovalRecord("test", "k", "s", 0, 0))
+    run = h.manager.start(
+        cfg,
+        prompt="x",
+        cwd=str(h.workdir),
+        background=True,
+        timeout_seconds=60,
+        title="t",
+        approval=models.ApprovalRecord("test", "k", "s", 0, 0),
+    )
     deadline = time.monotonic() + 10
     while not h.spawned and time.monotonic() < deadline:
         time.sleep(0.05)

@@ -73,8 +73,15 @@ def test_concurrency_limit(harness):
     # The manager enforces the limit itself too (two hooks can race).
     cfg = h.config.load()
     try:
-        h.manager.start(cfg, prompt="d", cwd=str(h.workdir), background=True, timeout_seconds=60, title="d",
-                        approval=models.ApprovalRecord("test", "k", "s", 0, 0))
+        h.manager.start(
+            cfg,
+            prompt="d",
+            cwd=str(h.workdir),
+            background=True,
+            timeout_seconds=60,
+            title="d",
+            approval=models.ApprovalRecord("test", "k", "s", 0, 0),
+        )
         raise AssertionError("expected RunRefused")
     except sub("runner").RunRefused as exc:
         assert exc.code == "concurrency_limit"

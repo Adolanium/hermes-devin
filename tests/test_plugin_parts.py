@@ -22,8 +22,19 @@ class FakeContext:
     def __init__(self):
         self.tools, self.hooks, self.commands, self.unload, self.emitted, self.injected = {}, {}, {}, [], [], []
 
-    def register_tool(self, name, toolset, schema, handler, check_fn=None, requires_env=None, is_async=False,
-                      description="", emoji="", override=False):
+    def register_tool(
+        self,
+        name,
+        toolset,
+        schema,
+        handler,
+        check_fn=None,
+        requires_env=None,
+        is_async=False,
+        description="",
+        emoji="",
+        override=False,
+    ):
         self.tools[name] = {"toolset": toolset, "schema": schema, "handler": handler, "emoji": emoji}
 
     def register_hook(self, name, callback):
@@ -73,9 +84,19 @@ def test_manifest_matches_registration():
 
 
 def _run(**kw):
-    defaults = dict(id=models.new_run_id(), prompt="p", title="t", cwd="/w", backend="acp",
-                    permission_mode="normal", model="", background=False, timeout_seconds=60,
-                    output=models.CappedText(1000), max_events=5)
+    defaults = dict(
+        id=models.new_run_id(),
+        prompt="p",
+        title="t",
+        cwd="/w",
+        backend="acp",
+        permission_mode="normal",
+        model="",
+        background=False,
+        timeout_seconds=60,
+        output=models.CappedText(1000),
+        max_events=5,
+    )
     defaults.update(kw)
     return models.Run(**defaults)
 
@@ -123,8 +144,12 @@ def test_run_ids_are_valid_store_ids():
 
 def test_event_envelope_and_sinks():
     emitted, broadcast, heard = [], [], []
-    bus = events.EventBus(plugin_id="devin", emit=lambda e, p: emitted.append(e),
-                          broadcast=lambda pid, e, p: broadcast.append((pid, e)), chatty_interval=10)
+    bus = events.EventBus(
+        plugin_id="devin",
+        emit=lambda e, p: emitted.append(e),
+        broadcast=lambda pid, e, p: broadcast.append((pid, e)),
+        chatty_interval=10,
+    )
     bus.subscribe(heard.append)
     run = _run()
     bus.publish("run.created", run)

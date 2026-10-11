@@ -50,10 +50,12 @@ ACTIVE_STATES = frozenset({RunState.CREATED, RunState.STARTING, RunState.RUNNING
 
 _ALLOWED: dict[RunState, frozenset[RunState]] = {
     RunState.CREATED: frozenset({RunState.STARTING, RunState.FAILED, RunState.CANCELLED, RunState.CANCELLING}),
-    RunState.STARTING: frozenset({RunState.RUNNING, RunState.CANCELLING, RunState.FAILED, RunState.CANCELLED,
-                                  RunState.TIMED_OUT}),
-    RunState.RUNNING: frozenset({RunState.CANCELLING, RunState.SUCCEEDED, RunState.FAILED, RunState.TIMED_OUT,
-                                 RunState.CANCELLED}),
+    RunState.STARTING: frozenset(
+        {RunState.RUNNING, RunState.CANCELLING, RunState.FAILED, RunState.CANCELLED, RunState.TIMED_OUT}
+    ),
+    RunState.RUNNING: frozenset(
+        {RunState.CANCELLING, RunState.SUCCEEDED, RunState.FAILED, RunState.TIMED_OUT, RunState.CANCELLED}
+    ),
     RunState.CANCELLING: frozenset({RunState.CANCELLED, RunState.TIMED_OUT, RunState.FAILED}),
 }
 
@@ -112,9 +114,13 @@ class ApprovalRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "via": self.via, "rule_key": self.rule_key, "summary": self.summary,
-            "requested_at": self.requested_at, "decided_at": self.decided_at,
-            "choice": self.choice, "decided_by": self.decided_by,
+            "via": self.via,
+            "rule_key": self.rule_key,
+            "summary": self.summary,
+            "requested_at": self.requested_at,
+            "decided_at": self.decided_at,
+            "choice": self.choice,
+            "decided_by": self.decided_by,
         }
 
 
@@ -130,8 +136,14 @@ class PermissionDecision:
     at: float
 
     def to_dict(self) -> dict[str, Any]:
-        return {"request_id": self.request_id, "title": self.title, "kind": self.kind,
-                "decision": self.decision, "reason": self.reason, "at": self.at}
+        return {
+            "request_id": self.request_id,
+            "title": self.title,
+            "kind": self.kind,
+            "decision": self.decision,
+            "reason": self.reason,
+            "at": self.at,
+        }
 
 
 @dataclass
@@ -186,7 +198,7 @@ class CappedText:
             take = text[: self._head_limit - self._head_len]
             self._head.append(take)
             self._head_len += len(take)
-            text = text[len(take):]
+            text = text[len(take) :]
             if not text:
                 return
         tail_limit = self.limit - self._head_limit
@@ -302,8 +314,13 @@ class Run:
     def add_event(self, kind: str, text: str = "", **data: Any) -> ProgressEvent:
         with self._lock:
             self._seq += 1
-            event = ProgressEvent(seq=self._seq, at=time.time(), kind=kind, text=text[:4000],
-                                  data={k: v for k, v in data.items() if v is not None})
+            event = ProgressEvent(
+                seq=self._seq,
+                at=time.time(),
+                kind=kind,
+                text=text[:4000],
+                data={k: v for k, v in data.items() if v is not None},
+            )
             self.events.append(event)
             overflow = len(self.events) - self.max_events
             if overflow > 0:
@@ -323,11 +340,17 @@ class Run:
         """Small view for listings and event payloads."""
         with self._lock:
             out: dict[str, Any] = {
-                "id": self.id, "title": self.title, "state": self.state.value,
-                "background": self.background, "cwd": self.cwd,
-                "permission_mode": self.permission_mode, "backend": self.backend,
-                "created_at": self.created_at, "started_at": self.started_at,
-                "finished_at": self.finished_at, "updated_at": self.updated_at,
+                "id": self.id,
+                "title": self.title,
+                "state": self.state.value,
+                "background": self.background,
+                "cwd": self.cwd,
+                "permission_mode": self.permission_mode,
+                "backend": self.backend,
+                "created_at": self.created_at,
+                "started_at": self.started_at,
+                "finished_at": self.finished_at,
+                "updated_at": self.updated_at,
                 "duration_seconds": self.duration_seconds(),
                 "tool_calls": len(self.tool_calls),
                 "files_changed": self.files_changed()[:50],
@@ -360,33 +383,36 @@ class Run:
                 return event.text[:200]
         return ""
 
-    def snapshot(self, *, events: int | None = None, include_output: bool = True,
-                 output_limit: int | None = None) -> dict[str, Any]:
+    def snapshot(
+        self, *, events: int | None = None, include_output: bool = True, output_limit: int | None = None
+    ) -> dict[str, Any]:
         """Full JSON view. ``events`` limits how many recent progress events are included."""
         with self._lock:
             data = self.summary()
-            data.update({
-                "schema_version": SCHEMA_VERSION,
-                "prompt": self.prompt,
-                "model": self.model,
-                "timeout_seconds": self.timeout_seconds,
-                "session_id": self.session_id,
-                "session_key": self.session_key,
-                "devin_session_id": self.devin_session_id,
-                "pid": self.pid,
-                "stop_reason": self.stop_reason,
-                "exit_code": self.exit_code,
-                "approval": self.approval.to_dict() if self.approval else None,
-                "permissions": [p.to_dict() for p in self.permissions],
-                "plan": list(self.plan),
-                "diffs": [dict(d) for d in list(self.diffs.values())[-30:]],
-                "commands": [dict(c) for c in list(self.commands.values())[-10:]],
-                "cancel_reason": self.cancel_reason,
-                "kill_report": dict(self.kill_report),
-                "events_dropped": self.events_dropped,
-                "output_chars": self.output.total,
-                "output_truncated": self.output.truncated,
-            })
+            data.update(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "prompt": self.prompt,
+                    "model": self.model,
+                    "timeout_seconds": self.timeout_seconds,
+                    "session_id": self.session_id,
+                    "session_key": self.session_key,
+                    "devin_session_id": self.devin_session_id,
+                    "pid": self.pid,
+                    "stop_reason": self.stop_reason,
+                    "exit_code": self.exit_code,
+                    "approval": self.approval.to_dict() if self.approval else None,
+                    "permissions": [p.to_dict() for p in self.permissions],
+                    "plan": list(self.plan),
+                    "diffs": [dict(d) for d in list(self.diffs.values())[-30:]],
+                    "commands": [dict(c) for c in list(self.commands.values())[-10:]],
+                    "cancel_reason": self.cancel_reason,
+                    "kill_report": dict(self.kill_report),
+                    "events_dropped": self.events_dropped,
+                    "output_chars": self.output.total,
+                    "output_truncated": self.output.truncated,
+                }
+            )
             chosen = self.events if events is None else (self.events[-events:] if events > 0 else [])
             data["events"] = [e.to_dict() for e in chosen]
             if include_output:

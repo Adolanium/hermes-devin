@@ -140,9 +140,10 @@ class RunStore:
                 continue
             if state in ACTIVE_STATES:
                 data["state"] = RunState.FAILED.value
-                data["error"] = {"code": "orphaned",
-                                 "message": "Hermes stopped while this run was active, so its result "
-                                            "was never collected."}
+                data["error"] = {
+                    "code": "orphaned",
+                    "message": "Hermes stopped while this run was active, so its result was never collected.",
+                }
                 data["finished_at"] = data.get("finished_at") or time.time()
                 self.save(data, force=True)
                 count += 1

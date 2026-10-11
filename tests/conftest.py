@@ -22,7 +22,8 @@ def _load_package():
     if PKG_NAME in sys.modules:
         return sys.modules[PKG_NAME]
     spec = importlib.util.spec_from_file_location(
-        PKG_NAME, PLUGIN_DIR / "__init__.py", submodule_search_locations=[str(PLUGIN_DIR)])
+        PKG_NAME, PLUGIN_DIR / "__init__.py", submodule_search_locations=[str(PLUGIN_DIR)]
+    )
     module = importlib.util.module_from_spec(spec)
     sys.modules[PKG_NAME] = module
     spec.loader.exec_module(module)
@@ -50,17 +51,28 @@ def load_yaml(path: Path) -> Any:
 
 
 def sub(name: str):
-    return sys.modules[f"{PKG_NAME}.{name}"] if f"{PKG_NAME}.{name}" in sys.modules else \
-        importlib.import_module(f"{PKG_NAME}.{name}")
+    return (
+        sys.modules[f"{PKG_NAME}.{name}"]
+        if f"{PKG_NAME}.{name}" in sys.modules
+        else importlib.import_module(f"{PKG_NAME}.{name}")
+    )
 
 
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path, monkeypatch):
     # Keep every temp file (prompt files, logs) inside pytest's basetemp.
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
-    for var in ("FAKE_DEVIN_SCENARIO", "FAKE_DEVIN_AUTH", "FAKE_DEVIN_LOG", "FAKE_DEVIN_PIDFILE",
-                "DEVIN_PERMISSION_MODE", "TERMINAL_CWD", "HERMES_PLATFORM", "HERMES_SESSION_PLATFORM",
-                "HERMES_SESSION_SOURCE"):
+    for var in (
+        "FAKE_DEVIN_SCENARIO",
+        "FAKE_DEVIN_AUTH",
+        "FAKE_DEVIN_LOG",
+        "FAKE_DEVIN_PIDFILE",
+        "DEVIN_PERMISSION_MODE",
+        "TERMINAL_CWD",
+        "HERMES_PLATFORM",
+        "HERMES_SESSION_PLATFORM",
+        "HERMES_SESSION_SOURCE",
+    ):
         monkeypatch.delenv(var, raising=False)
     yield
 
@@ -82,9 +94,19 @@ class Recorder:
 
 
 class Harness:
-    def __init__(self, tmp_path: Path, monkeypatch, settings: dict | None = None, *, scenario: str = "ok",
-                 auth: str = "ok", gate_answer: bool = True, interrupted=None, platform: str | None = None,
-                 cli_override: list[str] | None = None):
+    def __init__(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        settings: dict | None = None,
+        *,
+        scenario: str = "ok",
+        auth: str = "ok",
+        gate_answer: bool = True,
+        interrupted=None,
+        platform: str | None = None,
+        cli_override: list[str] | None = None,
+    ):
         config_mod = sub("config")
         core = sub("core")
         runner = sub("runner")
@@ -112,8 +134,10 @@ class Harness:
             return tree
 
         self.manager = runner.RunManager(
-            bus=self.bus, store=self.store, spawn=spawn,
-            injector=lambda text, key: (self.rec.injected.append((text, key)) or True),
+            bus=self.bus,
+            store=self.store,
+            spawn=spawn,
+            injector=lambda text, key: self.rec.injected.append((text, key)) or True,
             temp_dir=str(tmp_path),
             cli_override=cli_override if cli_override is not None else [sys.executable, str(FAKE_DEVIN)],
         )
@@ -121,9 +145,13 @@ class Harness:
         self._interrupt = threading.Event()
         self._yield = threading.Event()
         self.plugin = core.DevinPlugin(
-            config=self.config, manager=self.manager, gate=self.gate,
-            interrupted=interrupted or self._interrupt.is_set, session_key=lambda: "sess-key-1",
-            yield_requested=self._take_yield)
+            config=self.config,
+            manager=self.manager,
+            gate=self.gate,
+            interrupted=interrupted or self._interrupt.is_set,
+            session_key=lambda: "sess-key-1",
+            yield_requested=self._take_yield,
+        )
 
     def gate(self, tool: str, reason: str, rule_key: str) -> dict:
         self.rec.gate_calls.append((tool, reason, rule_key))
@@ -151,8 +179,10 @@ class Harness:
                 return json.loads(directive["message"])
             if directive and directive.get("action") == "approve":
                 verdict = self.gate(tool, directive.get("message", ""), directive.get("rule_key", ""))
-                self.plugin.post_approval_response(pattern_key="plugin_rule:" + directive["rule_key"],
-                                                   choice="once" if verdict.get("approved") else "deny")
+                self.plugin.post_approval_response(
+                    pattern_key="plugin_rule:" + directive["rule_key"],
+                    choice="once" if verdict.get("approved") else "deny",
+                )
                 if not verdict.get("approved"):
                     return {"ok": False, "error": {"code": "blocked", "message": verdict["message"]}}
         handler = self.plugin.handlers()[tool]

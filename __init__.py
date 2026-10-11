@@ -45,8 +45,9 @@ def _make_injector(ctx: Any):
     return inject
 
 
-def build(ctx: Any, *, config: ConfigSource | None = None, store: RunStore | None = None,
-          broadcast: Any = "default") -> DevinPlugin:
+def build(
+    ctx: Any, *, config: ConfigSource | None = None, store: RunStore | None = None, broadcast: Any = "default"
+) -> DevinPlugin:
     """Assemble the plugin objects for ``ctx``. Split out of ``register`` for tests."""
     config = config or ConfigSource()
     cfg, _err = config.try_load()
@@ -87,8 +88,12 @@ def register(ctx: Any) -> None:
     try:
         from .slash import make_handler
 
-        ctx.register_command("devin", make_handler(plugin), description="List, inspect or stop Devin runs",
-                             args_hint="[list | status <id> | cancel <id|all> | doctor]")
+        ctx.register_command(
+            "devin",
+            make_handler(plugin),
+            description="List, inspect or stop Devin runs",
+            args_hint="[list | status <id> | cancel <id|all> | doctor]",
+        )
     except Exception as exc:
         logger.warning("devin: slash command not registered: %s", exc)
 

@@ -33,8 +33,18 @@ from .runner import RunManager, RunRefused, resolve_cwd
 
 logger = logging.getLogger(__name__)
 
-_FORBIDDEN_ARGS = {"permission_mode", "mode", "allow_dangerous", "dangerous", "yolo", "bypass", "sandbox",
-                   "trust_workspace", "model", "cli_path"}
+_FORBIDDEN_ARGS = {
+    "permission_mode",
+    "mode",
+    "allow_dangerous",
+    "dangerous",
+    "yolo",
+    "bypass",
+    "sandbox",
+    "trust_workspace",
+    "model",
+    "cli_path",
+}
 
 
 def _json(data: dict[str, Any]) -> str:
@@ -131,16 +141,27 @@ def _parse_delegate_args(cfg: DevinConfig, args: dict[str, Any]) -> dict[str, An
     title = args.get("title") or ""
     if not isinstance(title, str):
         raise ArgError("title must be a string")
-    return {"prompt": prompt, "background": background, "timeout": timeout, "cwd": cwd,
-            "title": " ".join(title.split())[:120]}
+    return {
+        "prompt": prompt,
+        "background": background,
+        "timeout": timeout,
+        "cwd": cwd,
+        "title": " ".join(title.split())[:120],
+    }
 
 
 class DevinPlugin:
-    def __init__(self, *, config: ConfigSource, manager: RunManager, ledger: ApprovalLedger | None = None,
-                 gate: Callable[[str, str, str], dict] = default_gate,
-                 interrupted: Callable[[], bool] = default_interrupted,
-                 session_key: Callable[[], str] = default_session_key,
-                 yield_requested: Callable[[], bool] = default_yield_requested):
+    def __init__(
+        self,
+        *,
+        config: ConfigSource,
+        manager: RunManager,
+        ledger: ApprovalLedger | None = None,
+        gate: Callable[[str, str, str], dict] = default_gate,
+        interrupted: Callable[[], bool] = default_interrupted,
+        session_key: Callable[[], str] = default_session_key,
+        yield_requested: Callable[[], bool] = default_yield_requested,
+    ):
         self.config = config
         self.manager = manager
         self.ledger = ledger or ApprovalLedger()
@@ -151,8 +172,9 @@ class DevinPlugin:
 
     # -- hooks -----------------------------------------------------------------
 
-    def pre_tool_call(self, tool_name: str = "", args: dict | None = None, task_id: str = "",
-                      session_id: str = "", **_: Any) -> dict | None:
+    def pre_tool_call(
+        self, tool_name: str = "", args: dict | None = None, task_id: str = "", session_id: str = "", **_: Any
+    ) -> dict | None:
         """Ask for human approval of every Devin run, or block one that cannot run."""
         if tool_name != TOOL_NAME:
             return None
@@ -172,24 +194,27 @@ class DevinPlugin:
         if busy:
             return {"action": "block", "message": _error("concurrency_limit", busy)}
         rule_key = rule_key_for(cfg, parsed["prompt"], cwd)
-        summary = approval_message(cfg, prompt=parsed["prompt"], cwd=cwd, background=parsed["background"],
-                                   timeout=parsed["timeout"])
+        summary = approval_message(
+            cfg, prompt=parsed["prompt"], cwd=cwd, background=parsed["background"], timeout=parsed["timeout"]
+        )
         self.ledger.issue(scope_of(session_id, task_id), fingerprint(args), rule_key, summary)
         return {"action": "approve", "message": summary, "rule_key": rule_key}
 
     def post_approval_response(self, pattern_key: str = "", choice: str = "", **kwargs: Any) -> None:
         key = str(pattern_key or "")
         if key.startswith("plugin_rule:devin:"):
-            self.ledger.record_decision(key[len("plugin_rule:"):], str(choice or ""),
-                                        str(kwargs.get("decided_by") or ""))
+            self.ledger.record_decision(
+                key[len("plugin_rule:") :], str(choice or ""), str(kwargs.get("decided_by") or "")
+            )
 
     def on_unload(self) -> None:
         self.manager.shutdown("the Devin plugin was unloaded")
 
     # -- delegate ----------------------------------------------------------------
 
-    def _approve(self, cfg: DevinConfig, args: dict, parsed: dict, cwd: str, task_id: str,
-                 session_id: str) -> ApprovalRecord | str:
+    def _approve(
+        self, cfg: DevinConfig, args: dict, parsed: dict, cwd: str, task_id: str, session_id: str
+    ) -> ApprovalRecord | str:
         now = time.time()
         ticket = self.ledger.consume(scope_of(session_id, task_id), fingerprint(args))
         if ticket is not None:
@@ -197,13 +222,20 @@ class DevinPlugin:
         # No ticket from our hook: this call did not pass through the normal tool
         # path. Ask the same human gate directly, fail closed.
         rule_key = rule_key_for(cfg, parsed["prompt"], cwd)
-        summary = approval_message(cfg, prompt=parsed["prompt"], cwd=cwd, background=parsed["background"],
-                                   timeout=parsed["timeout"])
+        summary = approval_message(
+            cfg, prompt=parsed["prompt"], cwd=cwd, background=parsed["background"], timeout=parsed["timeout"]
+        )
         ok, message, choice = ask_gate(self.gate, summary, rule_key)
         if not ok:
             return message or "approval was not granted"
-        return ApprovalRecord(via="direct_gate", rule_key=rule_key, summary=summary, requested_at=now,
-                              decided_at=time.time(), choice=choice)
+        return ApprovalRecord(
+            via="direct_gate",
+            rule_key=rule_key,
+            summary=summary,
+            requested_at=now,
+            decided_at=time.time(),
+            choice=choice,
+        )
 
     def delegate(self, args: dict, task_id: str = "", session_id: str = "", **_: Any) -> str:
         cfg, err = self.config.try_load()
@@ -228,31 +260,65 @@ class DevinPlugin:
             return _error("not_approved", approval)
         try:
             run = self.manager.start(
-                cfg, prompt=parsed["prompt"], cwd=cwd, background=parsed["background"],
-                timeout_seconds=parsed["timeout"], title=parsed["title"], approval=approval,
-                session_id=str(session_id or ""), task_id=str(task_id or ""),
-                session_key=self.session_key() if parsed["background"] else "", argv=argv,
+                cfg,
+                prompt=parsed["prompt"],
+                cwd=cwd,
+                background=parsed["background"],
+                timeout_seconds=parsed["timeout"],
+                title=parsed["title"],
+                approval=approval,
+                session_id=str(session_id or ""),
+                task_id=str(task_id or ""),
+                session_key=self.session_key() if parsed["background"] else "",
+                argv=argv,
                 desktop=_session_platform() == "desktop",
             )
         except RunRefused as exc:
             return _error(exc.code, exc.message)
         if parsed["background"]:
-            return _json(_with_card({
-                "ok": True, "run_id": run.id, "state": run.state.value, "background": True,
-                "cwd": run.cwd, "permission_mode": run.permission_mode,
-                "message": (f"Devin is working in the background as {run.id}. The result will be posted to "
-                            "this conversation when it finishes; use devin_run_status to check progress."),
-            }, run.id))
-        how = self.manager.wait_foreground(run, interrupted=self.interrupted, gate=self.gate,
-                                           yield_requested=self.yield_requested, session_key=self.session_key)
+            return _json(
+                _with_card(
+                    {
+                        "ok": True,
+                        "run_id": run.id,
+                        "state": run.state.value,
+                        "background": True,
+                        "cwd": run.cwd,
+                        "permission_mode": run.permission_mode,
+                        "message": (
+                            f"Devin is working in the background as {run.id}. The result will be posted to "
+                            "this conversation when it finishes; use devin_run_status to check progress."
+                        ),
+                    },
+                    run.id,
+                )
+            )
+        how = self.manager.wait_foreground(
+            run,
+            interrupted=self.interrupted,
+            gate=self.gate,
+            yield_requested=self.yield_requested,
+            session_key=self.session_key,
+        )
         if how == "detached":
-            return _json(_with_card({
-                "ok": True, "run_id": run.id, "state": run.state.value, "background": True,
-                "cwd": run.cwd, "permission_mode": run.permission_mode,
-                "message": (f"Devin run {run.id} was moved to the background so the conversation can continue. "
+            return _json(
+                _with_card(
+                    {
+                        "ok": True,
+                        "run_id": run.id,
+                        "state": run.state.value,
+                        "background": True,
+                        "cwd": run.cwd,
+                        "permission_mode": run.permission_mode,
+                        "message": (
+                            f"Devin run {run.id} was moved to the background so the conversation can continue. "
                             "Its result will be posted here when it finishes. From now on Devin's permission "
-                            "prompts are denied, because nobody is waiting to answer them."),
-            }, run.id))
+                            "prompts are denied, because nobody is waiting to answer them."
+                        ),
+                    },
+                    run.id,
+                )
+            )
         return _json(_with_card(self._result_view(run, cfg.max_result_chars), run.id))
 
     # -- companions ---------------------------------------------------------------
@@ -269,11 +335,17 @@ class DevinPlugin:
         snap = run.snapshot(events=0, output_limit=limit)
         view = {
             "ok": snap["state"] == "succeeded",
-            "run_id": run.id, "state": snap["state"], "title": snap["title"],
-            "cwd": snap["cwd"], "permission_mode": snap["permission_mode"],
-            "duration_seconds": snap["duration_seconds"], "stop_reason": snap["stop_reason"],
-            "output": snap["output"], "output_truncated": snap["output_truncated"],
-            "output_chars": snap["output_chars"], "tool_calls": snap["tool_calls"],
+            "run_id": run.id,
+            "state": snap["state"],
+            "title": snap["title"],
+            "cwd": snap["cwd"],
+            "permission_mode": snap["permission_mode"],
+            "duration_seconds": snap["duration_seconds"],
+            "stop_reason": snap["stop_reason"],
+            "output": snap["output"],
+            "output_truncated": snap["output_truncated"],
+            "output_chars": snap["output_chars"],
+            "tool_calls": snap["tool_calls"],
             "files_changed": snap["files_changed"],
             "permissions": snap["permissions"][-20:],
         }
@@ -283,8 +355,10 @@ class DevinPlugin:
         if snap["state"] in ("cancelled", "timed_out"):
             view["cancel_reason"] = snap["cancel_reason"]
             view["kill_report"] = snap["kill_report"]
-            view["note"] = ("Devin and every process it started were stopped. Work done before the stop may "
-                            "be left in the working directory.")
+            view["note"] = (
+                "Devin and every process it started were stopped. Work done before the stop may "
+                "be left in the working directory."
+            )
         return view
 
     def list_runs(self, args: dict, **_: Any) -> str:
@@ -296,9 +370,26 @@ class DevinPlugin:
         limit = max(1, min(50, limit))
         rows: dict[str, dict] = {r.id: r.summary() for r in self.manager.list()}
         for data in self.manager.store.load_all():
-            rows.setdefault(data["id"], {k: data.get(k) for k in (
-                "id", "title", "state", "background", "cwd", "permission_mode", "backend", "created_at",
-                "started_at", "finished_at", "duration_seconds", "error")})
+            rows.setdefault(
+                data["id"],
+                {
+                    k: data.get(k)
+                    for k in (
+                        "id",
+                        "title",
+                        "state",
+                        "background",
+                        "cwd",
+                        "permission_mode",
+                        "backend",
+                        "created_at",
+                        "started_at",
+                        "finished_at",
+                        "duration_seconds",
+                        "error",
+                    )
+                },
+            )
         active = {"created", "starting", "running", "cancelling"}
         items = sorted(rows.values(), key=lambda r: r.get("created_at") or 0, reverse=True)
         if state == "active":
@@ -325,7 +416,7 @@ class DevinPlugin:
         else:
             snap = dict(stored)
             snap.pop("output", None)
-            snap["events"] = (snap.get("events") or [])[-max(0, min(100, events)):] if events else []
+            snap["events"] = (snap.get("events") or [])[-max(0, min(100, events)) :] if events else []
         snap.pop("prompt", None)
         return _json({"ok": True, **snap})
 
@@ -347,10 +438,18 @@ class DevinPlugin:
                 view["note"] = "Run is still active; this is the output so far."
             return _json(view)
         text, clipped = clip(str(stored.get("output") or ""), limit)
-        return _json({"ok": stored.get("state") == "succeeded", "run_id": stored.get("id"),
-                      "state": stored.get("state"), "title": stored.get("title"), "output": text,
-                      "output_truncated": bool(clipped or stored.get("output_truncated")),
-                      "error": stored.get("error"), "note": "Loaded from run history."})
+        return _json(
+            {
+                "ok": stored.get("state") == "succeeded",
+                "run_id": stored.get("id"),
+                "state": stored.get("state"),
+                "title": stored.get("title"),
+                "output": text,
+                "output_truncated": bool(clipped or stored.get("output_truncated")),
+                "error": stored.get("error"),
+                "note": "Loaded from run history.",
+            }
+        )
 
     def cancel_run(self, args: dict, **_: Any) -> str:
         args = args if isinstance(args, dict) else {}
@@ -363,10 +462,17 @@ class DevinPlugin:
         self.manager.cancel(run.id, "cancelled by devin_cancel_run")
         run.settled.wait(max(15.0, (self.config.try_load()[0] or DevinConfig()).cancel_grace_seconds * 4))
         snap = run.snapshot(events=0, include_output=False)
-        return _json({"ok": not run.active, "run_id": run.id, "state": snap["state"],
-                      "kill_report": snap["kill_report"],
-                      "message": "Devin and its child processes were stopped." if not run.active
-                      else "Stop requested; the run has not exited yet."})
+        return _json(
+            {
+                "ok": not run.active,
+                "run_id": run.id,
+                "state": snap["state"],
+                "kill_report": snap["kill_report"],
+                "message": "Devin and its child processes were stopped."
+                if not run.active
+                else "Stop requested; the run has not exited yet.",
+            }
+        )
 
     # -- registry glue ---------------------------------------------------------------
 
@@ -378,6 +484,7 @@ class DevinPlugin:
         (ACP ``session/load``), so Devin keeps the earlier context. Returns a JSON-able
         dict with ``ok`` and either ``run`` or ``error``.
         """
+
         def refuse(code: str, message: str) -> dict[str, Any]:
             return {"ok": False, "error": {"code": code, "message": message}}
 
@@ -392,8 +499,7 @@ class DevinPlugin:
         run, stored = self._lookup(run_id)
         parent = run.summary() if run is not None else (stored or {})
         if run is not None:
-            parent.update(devin_session_id=run.devin_session_id, session_id=run.session_id,
-                          session_key=run.session_key)
+            parent.update(devin_session_id=run.devin_session_id, session_id=run.session_id, session_key=run.session_key)
         if not parent:
             return refuse("not_found", f"No Devin run {run_id}.")
         if parent.get("state") in ("created", "starting", "running", "cancelling"):
@@ -406,14 +512,29 @@ class DevinPlugin:
             cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
             argv = self.manager.preflight(cfg)
             now = time.time()
-            approval = ApprovalRecord(via="desktop_card", rule_key="", choice="sent",
-                                      summary="Follow-up typed and sent on the run card in Hermes Desktop",
-                                      requested_at=now, decided_at=now, decided_by="user")
+            approval = ApprovalRecord(
+                via="desktop_card",
+                rule_key="",
+                choice="sent",
+                summary="Follow-up typed and sent on the run card in Hermes Desktop",
+                requested_at=now,
+                decided_at=now,
+                decided_by="user",
+            )
             child = self.manager.start(
-                cfg, prompt=text, cwd=cwd, background=True, timeout_seconds=cfg.background_timeout_seconds,
-                title=f"Follow-up: {text[:70]}", approval=approval, argv=argv, desktop=True,
-                session_id=str(parent.get("session_id") or ""), session_key=str(parent.get("session_key") or ""),
-                parent_run_id=str(parent["id"]), resume_session_id=str(parent["devin_session_id"]),
+                cfg,
+                prompt=text,
+                cwd=cwd,
+                background=True,
+                timeout_seconds=cfg.background_timeout_seconds,
+                title=f"Follow-up: {text[:70]}",
+                approval=approval,
+                argv=argv,
+                desktop=True,
+                session_id=str(parent.get("session_id") or ""),
+                session_key=str(parent.get("session_key") or ""),
+                parent_run_id=str(parent["id"]),
+                resume_session_id=str(parent["devin_session_id"]),
             )
         except RunRefused as exc:
             return refuse(exc.code, exc.message)

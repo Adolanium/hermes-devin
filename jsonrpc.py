@@ -45,11 +45,16 @@ class _Pending:
 
 
 class JsonRpcPeer:
-    def __init__(self, reader: BinaryIO, writer: BinaryIO, *,
-                 on_notification: Callable[[str, dict], None],
-                 on_request: Callable[[str, dict], Any],
-                 on_closed: Callable[[], None] | None = None,
-                 on_garbage: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        reader: BinaryIO,
+        writer: BinaryIO,
+        *,
+        on_notification: Callable[[str, dict], None],
+        on_request: Callable[[str, dict], Any],
+        on_closed: Callable[[], None] | None = None,
+        on_garbage: Callable[[str], None] | None = None,
+    ):
         self._reader = reader
         self._writer = writer
         self._on_notification = on_notification
@@ -143,8 +148,12 @@ class JsonRpcPeer:
             method = str(msg.get("method"))
             params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
             if "id" in msg and msg["id"] is not None:
-                threading.Thread(target=self._handle_request, args=(msg["id"], method, params),
-                                 name=f"devin-acp-{method}", daemon=True).start()
+                threading.Thread(
+                    target=self._handle_request,
+                    args=(msg["id"], method, params),
+                    name=f"devin-acp-{method}",
+                    daemon=True,
+                ).start()
             else:
                 try:
                     self._on_notification(method, params)
@@ -158,8 +167,9 @@ class JsonRpcPeer:
             return
         if "error" in msg and msg["error"] is not None:
             err = msg["error"] if isinstance(msg["error"], dict) else {}
-            pending.error = RpcError(int(err.get("code", INTERNAL_ERROR)), str(err.get("message", "error")),
-                                     err.get("data"))
+            pending.error = RpcError(
+                int(err.get("code", INTERNAL_ERROR)), str(err.get("message", "error")), err.get("data")
+            )
         else:
             pending.result = msg.get("result")
         pending.event.set()

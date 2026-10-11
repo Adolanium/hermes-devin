@@ -66,8 +66,10 @@ def approval_message(cfg: DevinConfig, *, prompt: str, cwd: str, background: boo
     excerpt = " ".join(prompt.split())
     if len(excerpt) > EXCERPT_CHARS:
         # Say how much is hidden, so a long prompt cannot tuck instructions out of view unnoticed.
-        excerpt = (f"{excerpt[:EXCERPT_CHARS]}... [prompt continues: {len(prompt)} characters in total, "
-                   f"first {EXCERPT_CHARS} shown]")
+        excerpt = (
+            f"{excerpt[:EXCERPT_CHARS]}... [prompt continues: {len(prompt)} characters in total, "
+            f"first {EXCERPT_CHARS} shown]"
+        )
     mode_note = {
         "plan": "read-only planning",
         "normal": "Devin asks before edits and commands",
@@ -149,9 +151,13 @@ def scope_of(session_id: str = "", task_id: str = "") -> str:
 
 def ticket_record(ticket: Ticket, now: float) -> ApprovalRecord:
     return ApprovalRecord(
-        via="pre_tool_call", rule_key=ticket.rule_key, summary=ticket.summary,
-        requested_at=ticket.created, decided_at=ticket.decided_at or now,
-        choice=ticket.choice or "approved", decided_by=ticket.decided_by,
+        via="pre_tool_call",
+        rule_key=ticket.rule_key,
+        summary=ticket.summary,
+        requested_at=ticket.created,
+        decided_at=ticket.decided_at or now,
+        choice=ticket.choice or "approved",
+        decided_by=ticket.decided_by,
     )
 
 

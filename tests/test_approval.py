@@ -17,8 +17,9 @@ def test_hook_ignores_other_tools(harness):
 
 def test_hook_returns_approve_directive(harness):
     h = harness()
-    directive = h.plugin.pre_tool_call(tool_name="delegate_to_devin", args={"prompt": "Add tests"},
-                                       task_id="t1", session_id="s1")
+    directive = h.plugin.pre_tool_call(
+        tool_name="delegate_to_devin", args={"prompt": "Add tests"}, task_id="t1", session_id="s1"
+    )
     assert directive["action"] == "approve"
     assert directive["rule_key"].startswith("devin:run:normal:")
     assert "permission mode 'normal'" in directive["message"]
