@@ -273,8 +273,9 @@ class Run:
     max_events: int = 500
     tool_calls: dict[str, dict[str, Any]] = field(default_factory=dict)
     plan: list[dict[str, Any]] = field(default_factory=list)
-    # Latest change per file (path -> unified diff record) and recent shell commands, for live views.
+    # Latest snapshot per edit and recent shell commands, for live views.
     diffs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    diffs_dropped: int = 0
     commands: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Devin's requests waiting for an answer: ask id -> {ask_id, title, kind, via, expires_at}.
     pending_permissions: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -430,6 +431,7 @@ class Run:
                     "permissions": [p.to_dict() for p in self.permissions],
                     "plan": list(self.plan),
                     "diffs": [dict(d) for d in list(self.diffs.values())[-30:]],
+                    "diffs_dropped": self.diffs_dropped,
                     "commands": [dict(c) for c in list(self.commands.values())[-10:]],
                     "cancel_reason": self.cancel_reason,
                     "kill_report": dict(self.kill_report),

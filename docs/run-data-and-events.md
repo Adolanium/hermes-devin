@@ -17,7 +17,7 @@ Each run is one `Run` record (`models.py`). Its JSON snapshot carries `schema_ve
 | Identity | `id` (`dv-` plus hex), `title`, `background`, `cwd`, `permission_mode`, `backend`, `model`, `session_id` (Hermes), `devin_session_id`, `pid` |
 | Timing | `created_at`, `started_at`, `finished_at`, `updated_at`, `duration_seconds`, `timeout_seconds` |
 | Work | `prompt`, `plan`, `tool_calls` (count), `files_changed`, `permission_requests` (count), `usage`, `last_activity` |
-| Live views | `diffs` (the latest change to each file, as a unified diff of at most 160 lines, with `added`, `removed` and `new_file`; up to 30 files), `commands` (the last 10 shell commands, each with `command`, the tail of its `output`, `exit_code` and `status`) |
+| Live views | `diffs` (the latest snapshot of each recorded edit, with a stable `edit_id`, `tool_call_id`, `path`, a unified diff of at most 160 lines, `added`, `removed` and `new_file`; up to 30 recent edits), `diffs_dropped` (the number of evicted edit snapshots), `commands` (the last 10 shell commands, each with `command`, the tail of its `output`, `exit_code` and `status`) |
 | Decisions | `approval` (how the run was approved: via, rule key, choice, times), `permissions` (each in-run request with its decision and reason) |
 | Outcome | `state`, `stop_reason`, `exit_code`, `error` (`code` and `message`), `cancel_reason`, `kill_report` |
 | Logs | `events` (capped, oldest dropped and counted in `events_dropped`), `output`, `output_chars`, `output_truncated` |
@@ -51,13 +51,20 @@ Each run keeps a list of progress events. Each has `seq`, `at`, `kind`, an optio
 | `thought` | A chunk of Devin's reasoning, when it shares one |
 | `tool_call` | A tool call Devin starts: title, `tool_kind`, file locations |
 | `tool_update` | A change to a running tool call, such as its status |
-| `diff` | A file edit as a unified diff: `path`, `patch`, `added`, `removed`, `new_file`, `truncated` |
+| `diff` | A file edit as a unified diff: `edit_id`, `tool_call_id`, `path`, `patch`, `added`, `removed`, `new_file`, `truncated` |
 | `terminal` | A shell command and its output so far: `command`, `output` (the tail), `exit_code`, `status`. Updated in place while the command runs |
 | `plan` | Devin's plan, with entries and how many are done |
 | `mode` | The ACP session mode chosen or changed |
 | `permission` | An in-run permission request and its decision |
 | `usage` | Token use reported by Devin |
 | `stderr` | Stray output from Devin that was not a protocol message |
+
+Desktop groups edit snapshots by path, retaining separate edits to the same file while
+replacing repeated updates of the same ACP content item. Line totals sum the recorded
+edit operations; they are not a net diff against Git or the start of the run. The view
+marks the 30-edit retention limit and each patch's 160-line truncation. For older run
+records, earlier edits can be recovered from retained `diff` events without rewriting
+the saved history.
 
 ## Stored snapshots
 

@@ -596,13 +596,26 @@ function Permissions({ permissions }) {
 
 // --- live changes and terminal ---------------------------------------------------
 
-/** Latest diff per file and recent commands: the REST detail overlaid with live events. */
+/** Edit snapshots grouped by file, including history retained in older run events. */
 function liveViews(data, events) {
-  const diffs = new Map()
+  const edits = new Map()
+  const files = new Map()
   const commands = new Map()
+  const recorded = data.events || []
+  const watermark = Math.max(0, ...recorded.map(e => e.seq || 0))
+  const putEdit = (d, seq, snapshot = false) => {
+    if (!d.path || typeof d.patch !== 'string') return
+    const key = JSON.stringify([d.path, d.edit_id || d.tool_call_id || 'legacy'])
+    const previous = edits.get(key)
+    if (snapshot || !previous || seq > previous.seq) edits.set(key, { ...d, seq })
+  }
+
+  for (const e of recorded) {
+    if (e.kind === 'diff') putEdit(e.data || {}, e.seq || 0)
+  }
 
   for (const d of data.diffs || []) {
-    diffs.set(d.path, d)
+    putEdit(d, watermark, true)
   }
 
   for (const c of data.commands || []) {
@@ -613,14 +626,24 @@ function liveViews(data, events) {
     const d = e.data || {}
 
     if (e.kind === 'diff' && d.path) {
-      diffs.delete(d.path)
-      diffs.set(d.path, { ...d, seq: e.seq })
+      putEdit(d, e.seq || 0)
     } else if (e.kind === 'terminal' && d.tool_call_id) {
       commands.set(d.tool_call_id, { ...commands.get(d.tool_call_id), ...d, seq: e.seq })
     }
   }
 
-  return { diffs: [...diffs.values()], commands: [...commands.values()] }
+  for (const d of [...edits.values()].sort((a, b) => a.seq - b.seq).slice(-30)) {
+    const previous = files.get(d.path)
+    files.delete(d.path)
+    files.set(d.path, {
+      ...d,
+      edits: [...(previous?.edits || []), d],
+      added: (previous?.added || 0) + (d.added || 0),
+      removed: (previous?.removed || 0) + (d.removed || 0)
+    })
+  }
+
+  return { diffs: [...files.values()], commands: [...commands.values()], diffsTruncated: !!data.diffs_dropped || edits.size > 30 }
 }
 
 const LINE = {
@@ -648,6 +671,17 @@ const box = {
 }
 
 function DiffView({ diff, full = false }) {
+  if (diff.edits) {
+    return jsx('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: 6 },
+      children: diff.edits.map((edit, i) => jsxs('div', {
+        children: [
+          diff.edits.length > 1 ? jsx('div', { style: { ...S.faint, padding: '3px 0' }, children: `Edit ${i + 1} · +${edit.added || 0} −${edit.removed || 0}` }) : null,
+          jsx(DiffView, { diff: edit, full })
+        ]
+      }, edit.edit_id || edit.tool_call_id || i))
+    })
+  }
   const lines = String(diff.patch || '').split('\n')
 
   return jsxs('div', {
@@ -670,7 +704,7 @@ function DiffView({ diff, full = false }) {
   })
 }
 
-function Changes({ diffs, cwd, os, live }) {
+function Changes({ diffs, cwd, os, live, truncated }) {
   const [picked, setPicked] = useState(null)
 
   if (!diffs.length) {
@@ -699,6 +733,10 @@ function Changes({ diffs, cwd, os, live }) {
           }),
           live && !picked ? jsx('span', { style: { ...S.faint, fontSize: 11 }, children: 'following Devin' }) : null
         ]
+      }),
+      jsx('div', {
+        style: { ...S.faint, fontSize: 11 },
+        children: truncated ? 'Showing the latest 30 recorded edits. Totals are not a net diff.' : 'Edit totals, not a net diff.'
       }),
       jsx('div', {
         style: { display: 'flex', flexWrap: 'wrap', gap: 5 },
@@ -1092,7 +1130,7 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
         ]
       }) : null,
       compact ? null : jsx(Plan, { plan: data.plan }),
-      compact ? null : jsx(Changes, { diffs: views.diffs, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os, live }),
+      compact ? null : jsx(Changes, { diffs: views.diffs, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os, live, truncated: views.diffsTruncated }),
       views.diffs.length && !compact ? null : jsx(Files, { files, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os }),
       compact ? null : jsx(Terminal, { commands: views.commands }),
       compact || !live ? null : jsx(Activity, { events }),
@@ -1195,7 +1233,7 @@ function ReviewPane({ runId, ctx }) {
   const detail = useRunDetail(runId, isActive(summary))
   const data = detail.data || {}
   const run = { ...data, ...summary }
-  const { diffs } = liveViews(data, liveAll[runId] || [])
+  const { diffs, diffsTruncated } = liveViews(data, liveAll[runId] || [])
   const added = diffs.reduce((n, d) => n + (d.added || 0), 0)
   const removed = diffs.reduce((n, d) => n + (d.removed || 0), 0)
 
@@ -1227,6 +1265,7 @@ function ReviewPane({ runId, ctx }) {
             })
           ]
         }),
+        jsx('div', { style: S.faint, children: diffsTruncated ? 'Showing the latest 30 recorded edits. Totals are not a net diff.' : 'Edit totals, not a net diff.' }),
         diffs.length
           ? jsx('div', {
               style: { display: 'flex', flexDirection: 'column', gap: 16 },
@@ -1825,7 +1864,7 @@ function DevinChip() {
 }
 
 // For tests/desktop_smoke.mjs; Hermes Desktop only reads the default export.
-export const __testing = { ReviewPane, askHermes, ModelFields, groupedModels, taskRequest }
+export const __testing = { ReviewPane, askHermes, ModelFields, groupedModels, taskRequest, liveViews }
 
 // --- plugin ----------------------------------------------------------------------
 

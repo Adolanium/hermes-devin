@@ -396,7 +396,7 @@ class AcpBackend:
         """
         run = io.run
         content = [item for item in update.get("content") or [] if isinstance(item, dict)]
-        for item in content:
+        for index, item in enumerate(content):
             path, new = item.get("path"), item.get("newText")
             if item.get("type") != "diff" or not isinstance(path, str) or not path or not isinstance(new, str):
                 continue
@@ -404,15 +404,20 @@ class AcpBackend:
             record = {
                 "path": path,
                 "tool_call_id": call_id,
+                "edit_id": f"{call_id}:{index}",
                 "new_file": item.get("oldText") is None,
                 **unified_diff(path, old, new),
             }
             with run._lock:
-                previous = run.diffs.get(path)
-                if previous is not None and previous["patch"] == record["patch"]:
+                key = record["edit_id"]
+                previous = run.diffs.get(key)
+                if previous == record:
                     continue
-                run.diffs.pop(path, None)
-                run.diffs[path] = record
+                run.diffs.pop(key, None)
+                run.diffs[key] = record
+                while len(run.diffs) > 30:
+                    run.diffs.pop(next(iter(run.diffs)))
+                    run.diffs_dropped += 1
             verb = "Created" if record["new_file"] else "Edited"
             io.emit("diff", f"{verb} {os.path.basename(path)} (+{record['added']} -{record['removed']})", **record)
 

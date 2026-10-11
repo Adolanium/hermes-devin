@@ -266,6 +266,29 @@ class Agent:
             outcome2 = (answer2.get("result") or {}).get("outcome") or {}
             text_chunk(sid, f"edit outcome: {outcome2.get('optionId')}\n")
         update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"})
+        if SCENARIO in ("repeated_edits", "many_edits"):
+            path = os.path.join(os.getcwd(), "index.html")
+            count = 35 if SCENARIO == "many_edits" else 3
+            for i in range(count):
+                item = {"type": "diff", "path": path, "oldText": "", "newText": f"edit-{i}\n"}
+                content = [item]
+                if i == 0 and SCENARIO == "repeated_edits":
+                    content.append({**item, "newText": "second-hunk\n"})
+                update(
+                    sid, {"sessionUpdate": "tool_call", "toolCallId": f"edit-{i}", "kind": "edit", "content": content}
+                )
+                if i == count - 1:
+                    content = [{**item, "newText": "final-snapshot\n"}]
+                for _ in range(2):
+                    update(
+                        sid,
+                        {
+                            "sessionUpdate": "tool_call_update",
+                            "toolCallId": f"edit-{i}",
+                            "status": "completed",
+                            "content": content,
+                        },
+                    )
         if SCENARIO == "live":
             # Shapes captured from Devin CLI 3000.11.3: an edit with old and new text, a new file
             # (no oldText), and a command whose output arrives as a growing snapshot.
