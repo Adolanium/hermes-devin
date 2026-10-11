@@ -366,6 +366,55 @@ class DevinPlugin:
 
     # -- registry glue ---------------------------------------------------------------
 
+    def follow_up(self, run_id: str, prompt: str) -> dict[str, Any]:
+        """Continue a finished run's Devin session with a message typed on its Desktop run card.
+
+        Typing and sending the message is the user's own approval, so no gate is asked.
+        The follow-up is a new background run that resumes the same Devin session
+        (ACP ``session/load``), so Devin keeps the earlier context. Returns a JSON-able
+        dict with ``ok`` and either ``run`` or ``error``.
+        """
+        def refuse(code: str, message: str) -> dict[str, Any]:
+            return {"ok": False, "error": {"code": code, "message": message}}
+
+        cfg, err = self.config.try_load()
+        if cfg is None:
+            return refuse("invalid_settings", err or "invalid settings")
+        text = prompt.strip() if isinstance(prompt, str) else ""
+        if not text:
+            return refuse("invalid_arguments", "The follow-up is empty.")
+        if len(text) > cfg.max_prompt_chars:
+            return refuse("invalid_arguments", f"The follow-up is longer than {cfg.max_prompt_chars} characters.")
+        run, stored = self._lookup(run_id)
+        parent = run.summary() if run is not None else (stored or {})
+        if run is not None:
+            parent.update(devin_session_id=run.devin_session_id, session_id=run.session_id,
+                          session_key=run.session_key)
+        if not parent:
+            return refuse("not_found", f"No Devin run {run_id}.")
+        if parent.get("state") in ("created", "starting", "running", "cancelling"):
+            return refuse("busy", "Devin is still working on this run. Send the follow-up when it finishes.")
+        if parent.get("backend") != "acp" or not parent.get("devin_session_id"):
+            return refuse("not_resumable", "Only runs on the ACP backend keep a Devin session to continue.")
+        if cfg.backend != "acp":
+            return refuse("not_resumable", "Follow-ups need backend: acp in the plugin settings.")
+        try:
+            cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
+            argv = self.manager.preflight(cfg)
+            now = time.time()
+            approval = ApprovalRecord(via="desktop_card", rule_key="", choice="sent",
+                                      summary="Follow-up typed and sent on the run card in Hermes Desktop",
+                                      requested_at=now, decided_at=now, decided_by="user")
+            child = self.manager.start(
+                cfg, prompt=text, cwd=cwd, background=True, timeout_seconds=cfg.background_timeout_seconds,
+                title=f"Follow-up: {text[:70]}", approval=approval, argv=argv, desktop=True,
+                session_id=str(parent.get("session_id") or ""), session_key=str(parent.get("session_key") or ""),
+                parent_run_id=str(parent["id"]), resume_session_id=str(parent["devin_session_id"]),
+            )
+        except RunRefused as exc:
+            return refuse(exc.code, exc.message)
+        return {"ok": True, "run": child.summary()}
+
     def handlers(self) -> dict[str, Callable[..., str]]:
         return {
             schemas.DELEGATE: self.delegate,

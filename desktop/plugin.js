@@ -28,6 +28,7 @@ import {
   ROUTES_AREA,
   SIDEBAR_NAV_AREA,
   STATUSBAR_AREAS,
+  Textarea,
   Tip,
   TRANSCRIPT_DIRECTIVE_AREA,
   useQuery,
@@ -737,6 +738,84 @@ function PendingRequests({ runId, pending }) {
   })
 }
 
+// --- follow-ups ------------------------------------------------------------------
+
+function FollowUpBox({ runId, active }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const send = async () => {
+    const prompt = text.trim()
+
+    if (!prompt || busy || active) {
+      return
+    }
+
+    setBusy(true)
+
+    try {
+      const body = await rest(`/runs/${runId}/follow-up`, { method: 'POST', body: { prompt } })
+
+      if (body && body.run) {
+        mergeRuns([body.run])
+      }
+
+      setText('')
+    } catch (error) {
+      host.notify({ kind: 'error', message: (error && error.message) || 'Could not send the follow-up' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 6 },
+    children: [
+      jsx(Textarea, {
+        value: text,
+        rows: 2,
+        disabled: busy || active,
+        placeholder: active ? 'You can follow up when Devin finishes…' : 'Tell Devin what to do next…',
+        onChange: event => setText(event.target.value),
+        onKeyDown: event => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            void send()
+          }
+        },
+        style: { fontSize: 13, resize: 'vertical', minHeight: 54 }
+      }),
+      jsxs('div', {
+        style: { ...S.row, justifyContent: 'space-between' },
+        children: [
+          jsx('span', {
+            style: { ...S.faint, fontSize: 11.5 },
+            children: 'Continues the same Devin session, so Devin remembers this run. Enter sends, Shift+Enter adds a line.'
+          }),
+          jsx(Button, {
+            size: 'xs',
+            variant: 'default',
+            disabled: busy || active || !text.trim(),
+            onClick: send,
+            children: busy ? 'Sending…' : 'Send to Devin'
+          })
+        ]
+      })
+    ]
+  })
+}
+
+function FollowUps({ children, ctx, wide }) {
+  if (!children.length) {
+    return null
+  }
+
+  return jsx('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 12, borderLeft: '2px solid color-mix(in srgb, var(--ui-accent) 40%, transparent)' },
+    children: children.map(child => jsx(RunCard, { runId: child.id, ctx, wide: true }, child.id))
+  })
+}
+
 function useRunDetail(runId, active) {
   return useQuery({
     queryKey: [ID, 'run', runId],
@@ -792,6 +871,10 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
 
   const files = run.files_changed || []
   const views = liveViews(data, events)
+  const followUps = Object.values(summaries)
+    .filter(r => r.parent_run_id === runId)
+    .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+  const resumable = run.backend === 'acp' && Boolean(data.devin_session_id)
   const stop = async () => {
     setStopping(true)
 
@@ -931,7 +1014,9 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
             ]
           })
         ]
-      })
+      }),
+      compact ? null : jsx(FollowUps, { children: followUps, ctx }),
+      !compact && resumable && followUps.length === 0 ? jsx(FollowUpBox, { runId, active: live }) : null
     ]
   })
 }
@@ -1032,7 +1117,8 @@ function DevinPage({ ctx }) {
 
   const all = Object.values(runs).sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
   const active = all.filter(isActive)
-  const finished = all.filter(r => !isActive(r))
+  const ids = new Set(all.map(r => r.id))
+  const finished = all.filter(r => !isActive(r) && !(r.parent_run_id && ids.has(r.parent_run_id)))
   const succeeded = finished.filter(r => r.state === 'succeeded').length
   const filesTouched = new Set(all.flatMap(r => r.files_changed || [])).size
 

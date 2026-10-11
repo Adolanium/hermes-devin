@@ -30,9 +30,10 @@ from typing import Any
 
 _RUN_ID = re.compile(r"^dv-[0-9a-f]{6,32}$")
 _ACTIVE = {"created", "starting", "running", "cancelling"}
-_SUMMARY_KEYS = ("id", "title", "state", "background", "cwd", "permission_mode", "backend", "created_at",
-                 "started_at", "finished_at", "updated_at", "duration_seconds", "tool_calls", "files_changed",
-                 "permission_requests", "last_activity", "usage", "error", "schema_version")
+_SUMMARY_KEYS = ("id", "title", "state", "background", "cwd", "permission_mode", "backend", "parent_run_id",
+                 "created_at", "started_at", "finished_at", "updated_at", "duration_seconds", "tool_calls",
+                 "files_changed", "permission_requests", "pending_permissions", "last_activity", "usage", "error",
+                 "schema_version")
 _DETAIL_EVENTS = 60
 
 
@@ -44,8 +45,8 @@ def runs_dir() -> Path | None:
     return plugin_data_dir("devin") / "runs"
 
 
-def live_manager() -> Any | None:
-    """The run manager of the agent half loaded in this process, if any."""
+def live_plugin() -> Any | None:
+    """The agent half loaded in this process (a ``DevinPlugin``), if any."""
     for name, module in list(sys.modules.items()):
         if not name.startswith("hermes_plugins.") or name.count(".") != 1:
             continue
@@ -55,10 +56,32 @@ def live_manager() -> Any | None:
             plugin = module.get_plugin()
         except Exception:
             continue
-        manager = getattr(plugin, "manager", None)
-        if manager is not None:
-            return manager
+        if plugin is not None and getattr(plugin, "manager", None) is not None:
+            return plugin
     return None
+
+
+def live_manager() -> Any | None:
+    """The run manager of the agent half loaded in this process, if any."""
+    plugin = live_plugin()
+    return plugin.manager if plugin is not None else None
+
+
+_FOLLOW_UP_STATUS = {"not_found": 404, "busy": 409, "not_resumable": 409, "concurrency_limit": 429,
+                     "invalid_arguments": 400, "invalid_settings": 409}
+
+
+def follow_up(run_id: str, prompt: Any, plugin: Any | None) -> tuple[int, dict[str, Any]]:
+    """Start a follow-up run in the same Devin session. Returns ``(status code, body)``."""
+    if not _RUN_ID.match(run_id or "") or not isinstance(prompt, str):
+        return 400, {"detail": "expected a run id and a prompt"}
+    if plugin is None:
+        return 409, {"detail": "The Devin agent half is not loaded in this Hermes process."}
+    result = plugin.follow_up(run_id, prompt)
+    if result.get("ok"):
+        return 200, {"ok": True, "run": _summary(result["run"])}
+    error = result.get("error") or {}
+    return _FOLLOW_UP_STATUS.get(error.get("code"), 409), {"detail": error.get("message") or "follow-up refused"}
 
 
 def _load(path: Path) -> dict[str, Any] | None:
@@ -163,6 +186,13 @@ else:
     @router.post("/runs/{run_id}/permissions/{ask_id}")
     def _answer(run_id: str, ask_id: str, body: dict) -> dict[str, Any]:
         status, payload = answer_permission(run_id, ask_id, (body or {}).get("allow"), live_manager())
+        if status != 200:
+            raise HTTPException(status_code=status, detail=payload["detail"])
+        return payload
+
+    @router.post("/runs/{run_id}/follow-up")
+    def _follow_up(run_id: str, body: dict) -> dict[str, Any]:
+        status, payload = follow_up(run_id, (body or {}).get("prompt"), live_plugin())
         if status != 200:
             raise HTTPException(status_code=status, detail=payload["detail"])
         return payload

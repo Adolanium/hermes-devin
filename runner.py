@@ -372,7 +372,8 @@ class RunManager:
 
     def start(self, cfg: DevinConfig, *, prompt: str, cwd: str, background: bool, timeout_seconds: int,
               title: str, approval: ApprovalRecord, session_id: str = "", task_id: str = "",
-              session_key: str = "", argv: list[str] | None = None, desktop: bool = False) -> Run:
+              session_key: str = "", argv: list[str] | None = None, desktop: bool = False,
+              parent_run_id: str = "", resume_session_id: str = "") -> Run:
         if self._closed:
             raise RunRefused("shutting_down", "The Devin plugin is shutting down")
         argv = argv if argv is not None else self.preflight(cfg)
@@ -382,6 +383,7 @@ class RunManager:
             backend=cfg.backend, permission_mode=cfg.permission_mode, model=cfg.model,
             background=background, timeout_seconds=timeout_seconds, session_id=session_id,
             task_id=task_id, session_key=session_key, approval=approval, desktop=desktop,
+            parent_run_id=parent_run_id, resume_session_id=resume_session_id,
             max_events=cfg.max_progress_events, output=CappedText(cfg.max_output_chars),
         )
         env = self._child_env(cfg)

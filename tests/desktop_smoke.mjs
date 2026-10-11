@@ -48,6 +48,11 @@ const done = {
   permission_mode: 'accept-edits', backend: 'acp', created_at: now - 300, finished_at: now - 290, updated_at: now - 290,
   tool_calls: 2, files_changed: ['C:\\work\\app\\hello.txt']
 }
+const followUp = {
+  id: 'dv-dddddddddd', title: 'Follow-up: also add tests', state: 'succeeded', background: true, cwd: 'C:\\work\\app',
+  permission_mode: 'accept-edits', backend: 'acp', parent_run_id: 'dv-cccccccccc', created_at: now - 200,
+  finished_at: now - 190, updated_at: now - 190, tool_calls: 1, files_changed: []
+}
 const details = {
   [running.id]: {
     ...running,
@@ -74,7 +79,8 @@ const details = {
     ]
   },
   [failed.id]: { ...failed, events: [], permissions: [] },
-  [done.id]: { ...done, events: [], permissions: [], plan: [], output: 'Created **hello.txt**.' }
+  [done.id]: { ...done, events: [], permissions: [], plan: [], output: 'Created **hello.txt**.', devin_session_id: 'stump-hexagon' },
+  [followUp.id]: { ...followUp, events: [], permissions: [], plan: [], output: 'Added tests.', devin_session_id: 'stump-hexagon' }
 }
 
 // --- the stub SDK -----------------------------------------------------------------
@@ -103,6 +109,7 @@ export const Button = ({ children, onClick, disabled }) => h('button', { onClick
 export const Codicon = ({ name }) => h('i', { 'data-icon': name })
 export const GlyphSpinner = () => h('span', null, '*')
 export const Tip = ({ children }) => children
+export const Textarea = props => h('textarea', { placeholder: props.placeholder, disabled: props.disabled })
 export const MessageTextContent = ({ text }) => h('div', { 'data-md': true }, text)
 export const PALETTE_AREA = 'palette'
 export const ROUTES_AREA = 'routes'
@@ -143,7 +150,7 @@ const ctx = {
   rest: async (p, opts) => {
     restCalls.push([p, opts])
     if (p.startsWith('/runs?')) {
-      return { runs: [running, failed, done], live: true }
+      return { runs: [running, failed, done, followUp], live: true }
     }
     return details[p.split('/')[2]?.split('?')[0]] || {}
   },
@@ -194,10 +201,13 @@ render('running card', directive.render({ attrs: { id: running.id }, streaming: 
   ['Add type hints', 'Working', 'utils.py', 'Read utils.py', 'Stop', 'Edit src/models.py', '15k tokens',
    'Devin asks to', 'Run `pytest -q`', 'Allow', 'Deny', 'Denied automatically in',
    'Changes · 1 file', '+def add(a: int, b: int) -&gt; int:', 'following Devin', 'pytest -q', 'exit 0', 'npm test', 'tick 1'])
-render('finished card', directive.render({ attrs: { id: done.id }, streaming: false }), ['Create hello.txt', 'Done', 'hello.txt'])
+const thread = render('finished card', directive.render({ attrs: { id: done.id }, streaming: false }),
+  ['Create hello.txt', 'Done', 'hello.txt', 'Follow-up: also add tests', 'Send to Devin', 'Tell Devin what to do next'])
+check('the follow-up box sits only on the newest run of a thread', (thread.match(/Send to Devin/g) || []).length === 1)
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
-render('page', byArea('routes')[0].render(), ['Devin', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+const page = render('page', byArea('routes')[0].render(), ['Devin', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+check('follow-ups are not listed as separate history rows', !page.includes('Follow-up: also add tests'))
 render('status chip', byArea('statusBar.right')[0].render(), ['Devin needs you'])
 check('a waiting request alerts once', state.notices.filter(n => n.pet && n.pet.startsWith('Devin asks to')).length === 1, JSON.stringify(state.notices))
 

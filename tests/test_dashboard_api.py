@@ -54,7 +54,7 @@ def test_live_runs_win_and_can_be_cancelled(harness, tmp_path):
     api = _api()
     root = tmp_path / "data" / "runs"
     deadline = __import__("time").time() + 10
-    while h.manager.get(run_id).state.value != "running" and __import__("time").time() < deadline:
+    while not h.manager.get(run_id).files_changed() and __import__("time").time() < deadline:
         __import__("time").sleep(0.05)
     rows = api.list_runs(root, "active", manager=h.manager)
     assert [r["id"] for r in rows] == [run_id] and rows[0]["state"] == "running"
