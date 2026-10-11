@@ -32,6 +32,7 @@ import {
   Tip,
   TRANSCRIPT_DIRECTIVE_AREA,
   useQuery,
+  useTheme,
   useValue
 } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
@@ -257,9 +258,210 @@ const CSS = `
 .devin-flash { animation: devin-flash 1.6s ease-out; }
 .devin-in { animation: devin-in 0.25s ease-out; }
 .devin-sweep { position: absolute; left: 0; right: 0; top: 0; height: 2px; overflow: hidden; }
-.devin-sweep::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--ui-accent), transparent); animation: devin-sweep 1.4s linear infinite; }
+.devin-sweep::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--ui-accent), var(--ui-cyan), transparent); animation: devin-sweep 1.4s linear infinite; }
+@keyframes devin-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+@keyframes devin-aurora { 0%, 100% { transform: translate(-5%, -4%) rotate(0deg); } 50% { transform: translate(5%, 4%) rotate(6deg); } }
+@keyframes devin-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-accent) 40%, transparent); } 50% { box-shadow: 0 0 0 7px transparent; } }
+.devin-aurora { position: absolute; inset: -45%; pointer-events: none; filter: blur(12px); animation: devin-aurora 20s ease-in-out infinite;
+  background: radial-gradient(38% 32% at 32% 42%, color-mix(in srgb, var(--ui-accent) 24%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 68% 58%, color-mix(in srgb, var(--ui-cyan) 18%, transparent), transparent 70%),
+    radial-gradient(28% 26% at 50% 18%, color-mix(in srgb, var(--ui-purple) 16%, transparent), transparent 70%); }
+.devin-gradient-text { background: linear-gradient(90deg, var(--ui-text-primary), var(--ui-accent), var(--ui-cyan), var(--ui-purple), var(--ui-text-primary)); background-size: 300% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: devin-flow 10s linear infinite; }
+.devin-shimmer { animation: devin-flow 5s linear infinite; }
+.devin-link { background: linear-gradient(90deg, transparent, var(--ui-accent), var(--ui-cyan), var(--ui-purple), transparent); background-size: 300% 100%; }
+.devin-link-live { animation: devin-flow 1.8s linear infinite; }
+.devin-pulse { animation: devin-pulse 2.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .devin-aurora, .devin-gradient-text, .devin-shimmer, .devin-link-live, .devin-pulse, .devin-sweep::after, .devin-flash, .devin-in { animation: none; }
+}
 .devin-row:hover { background: var(--ui-row-hover-background); }
 `
+
+// --- Devin × Hermes ----------------------------------------------------------------
+
+/** CSS mask of the Devin mark, read from the local Devin app ('' when it is not installed). */
+const $devinMark = atom(null)
+
+async function loadBrand() {
+  if (!rest || $devinMark.get() !== null) {
+    return
+  }
+
+  try {
+    const body = await rest('/brand/devin')
+    $devinMark.set(body && body.svg ? `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(body.svg)}")` : '')
+  } catch {
+    $devinMark.set('')
+  }
+}
+
+const BRAND_FILL = 'linear-gradient(135deg, var(--ui-accent), var(--ui-cyan), var(--ui-purple), var(--ui-accent))'
+
+/** Devin's hexagon mark, filled with the app's accent gradient. */
+function DevinMark({ size = 20, animated = false }) {
+  const mask = useValue($devinMark)
+
+  if (!mask) {
+    return jsx(Codicon, { name: 'hubot', style: { fontSize: Math.round(size * 0.85), color: 'var(--ui-accent)' } })
+  }
+
+  return jsx('span', {
+    'aria-label': 'Devin',
+    role: 'img',
+    className: animated ? 'devin-shimmer' : undefined,
+    style: {
+      display: 'inline-block',
+      flex: 'none',
+      width: size,
+      height: size,
+      background: BRAND_FILL,
+      backgroundSize: '300% 300%',
+      WebkitMaskImage: mask,
+      maskImage: mask,
+      WebkitMaskRepeat: 'no-repeat',
+      maskRepeat: 'no-repeat',
+      WebkitMaskPosition: 'center',
+      maskPosition: 'center',
+      WebkitMaskSize: 'contain',
+      maskSize: 'contain'
+    }
+  })
+}
+
+/** The Hermes badge the app itself ships (light and dark variants). */
+function HermesMark({ size = 20 }) {
+  const theme = useTheme()
+  const [failed, setFailed] = useState(false)
+  const dark = !theme || theme.renderedMode !== 'light'
+
+  if (failed) {
+    return jsx(Codicon, { name: 'sparkle', style: { fontSize: Math.round(size * 0.85), color: 'var(--ui-text-primary)' } })
+  }
+
+  return jsx('img', {
+    alt: 'Hermes',
+    src: dark ? 'nous-girl-dark.png' : 'nous-girl.png',
+    width: size,
+    height: size,
+    draggable: false,
+    onError: () => setFailed(true),
+    style: { width: size, height: size, flex: 'none', objectFit: 'contain' }
+  })
+}
+
+/** The two marks as one badge: Devin in front, Hermes tucked into the corner. */
+function PairBadge({ size = 28, live = false }) {
+  return jsxs('span', {
+    className: live ? 'devin-pulse' : undefined,
+    style: {
+      position: 'relative',
+      display: 'grid',
+      placeItems: 'center',
+      width: size,
+      height: size,
+      flex: 'none',
+      borderRadius: Math.round(size * 0.28),
+      background: 'color-mix(in srgb, var(--ui-accent) 13%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--ui-accent) 28%, transparent)'
+    },
+    children: [
+      jsx(DevinMark, { size: Math.round(size * 0.6), animated: live }),
+      jsx('span', {
+        style: { position: 'absolute', right: -5, bottom: -5, display: 'grid', placeItems: 'center' },
+        children: jsx(HermesMark, { size: Math.round(size * 0.52) })
+      })
+    ]
+  })
+}
+
+function BrandTile({ children, live }) {
+  return jsx('span', {
+    className: live ? 'devin-pulse' : undefined,
+    style: {
+      position: 'relative',
+      display: 'grid',
+      placeItems: 'center',
+      width: 72,
+      height: 72,
+      flex: 'none',
+      borderRadius: 20,
+      background: 'color-mix(in srgb, var(--ui-text-primary) 5%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 55%, transparent)',
+      boxShadow: '0 10px 30px -12px color-mix(in srgb, var(--ui-accent) 45%, transparent)',
+      backdropFilter: 'blur(6px)'
+    },
+    children
+  })
+}
+
+function Connector({ live }) {
+  return jsxs('span', {
+    style: { position: 'relative', display: 'flex', alignItems: 'center', width: 132, height: 72, flex: 'none' },
+    children: [
+      jsx('span', {
+        className: live ? 'devin-link devin-link-live' : 'devin-link',
+        style: { position: 'absolute', left: 6, right: 6, top: '50%', height: 2, marginTop: -1, borderRadius: 2, opacity: live ? 1 : 0.55 }
+      }),
+      jsx('span', {
+        className: 'wordmark',
+        style: {
+          position: 'relative',
+          margin: '0 auto',
+          display: 'grid',
+          placeItems: 'center',
+          width: 30,
+          height: 30,
+          borderRadius: 999,
+          fontSize: 15,
+          letterSpacing: 0,
+          color: 'var(--ui-text-primary)',
+          background: 'var(--ui-editor-surface-background, var(--ui-surface-background, transparent))',
+          border: '1px solid color-mix(in srgb, var(--ui-accent) 45%, transparent)'
+        },
+        children: '×'
+      })
+    ]
+  })
+}
+
+function Hero({ live }) {
+  return jsxs('div', {
+    style: {
+      position: 'relative',
+      overflow: 'hidden',
+      borderRadius: 18,
+      padding: '34px 24px 30px',
+      border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 40%, transparent)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: 16,
+      textAlign: 'center'
+    },
+    children: [
+      jsx('div', { className: 'devin-aurora', 'aria-hidden': true }),
+      jsxs('div', {
+        style: { position: 'relative', display: 'flex', alignItems: 'center' },
+        children: [
+          jsx(BrandTile, { live, children: jsx(DevinMark, { size: 38, animated: true }) }),
+          jsx(Connector, { live }),
+          jsx(BrandTile, { live, children: jsx(HermesMark, { size: 52 }) })
+        ]
+      }),
+      jsx('div', {
+        className: 'wordmark devin-gradient-text',
+        style: { position: 'relative', fontSize: 'clamp(30px, 5.2vw, 56px)', whiteSpace: 'nowrap' },
+        children: 'Devin × Hermes'
+      }),
+      jsx('p', {
+        style: { position: 'relative', margin: 0, maxWidth: 560, color: 'var(--ui-text-secondary)', lineHeight: 1.5 },
+        children: live
+          ? 'Devin is at work. Every edit, command and question shows up here as it happens.'
+          : 'Hermes plans the task and asks you first. Devin writes the code on this machine. You watch every line land.'
+      })
+    ]
+  })
+}
 
 // --- the run card ---------------------------------------------------------------
 
@@ -898,19 +1100,7 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
           jsxs('div', {
             style: { ...S.row, flex: 1 },
             children: [
-              jsx('span', {
-                style: {
-                  display: 'grid',
-                  placeItems: 'center',
-                  width: 26,
-                  height: 26,
-                  borderRadius: 7,
-                  background: 'color-mix(in srgb, var(--ui-accent) 16%, transparent)',
-                  color: 'var(--ui-accent)',
-                  flex: 'none'
-                },
-                children: jsx(Codicon, { name: 'hubot', style: { fontSize: 15 } })
-              }),
+              jsx(PairBadge, { size: 30, live }),
               jsxs('div', {
                 style: { display: 'flex', flexDirection: 'column', minWidth: 0 },
                 children: [
@@ -1366,23 +1556,8 @@ function DevinPage({ ctx }) {
         jsxs('header', {
           style: { display: 'flex', flexDirection: 'column', gap: 14 },
           children: [
-            jsxs('div', {
-              style: { display: 'flex', flexDirection: 'column', gap: 6 },
-              children: [
-                jsxs('div', {
-                  style: { ...S.row, gap: 10 },
-                  children: [
-                    jsx(Codicon, { name: 'hubot', style: { fontSize: 22, color: 'var(--ui-accent)' } }),
-                    jsx('h1', { style: { fontSize: 20, fontWeight: 650, margin: 0 }, children: 'Devin' }),
-                    active.length ? jsx('span', { style: S.pill('var(--ui-accent)'), children: `${active.length} working` }) : null
-                  ]
-                }),
-                jsx('p', {
-                  style: { ...S.muted, margin: 0 },
-                  children: 'Coding tasks Hermes hands to the Devin CLI on this machine. Every run waits for your approval.'
-                })
-              ]
-            }),
+            jsx('h1', { style: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }, children: 'Devin × Hermes' }),
+            jsx(Hero, { live: active.length > 0 }),
             all.length
               ? jsxs('div', {
                   style: { display: 'flex', flexWrap: 'wrap', gap: 10 },
@@ -1490,6 +1665,7 @@ function DevinChip() {
       children: waiting.length
         ? [jsx(Codicon, { name: 'shield', style: { fontSize: 12 } }), jsx('span', { children: 'Devin needs you' })]
         : [
+            jsx(DevinMark, { size: 12, animated: true }),
             jsx(GlyphSpinner, { ariaLabel: 'Devin is working' }),
             jsx('span', { children: active.length === 1 ? 'Devin working' : `Devin · ${active.length} running` })
           ]
@@ -1508,6 +1684,7 @@ export default {
   description: 'Live Devin run cards in chat, a Devin runs page and a status-bar indicator.',
   register(ctx) {
     rest = (path, opts) => ctx.rest(path, opts)
+    void loadBrand()
 
     const style = document.createElement('style')
     style.dataset.plugin = ID

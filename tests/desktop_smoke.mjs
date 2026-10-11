@@ -94,6 +94,7 @@ export function atom(value) {
   const subs = new Set()
   return { get: () => value, set: next => { value = next; subs.forEach(fn => fn(value)) }, listen: fn => (subs.add(fn), () => subs.delete(fn)) }
 }
+export const useTheme = () => ({ renderedMode: 'dark' })
 export function useValue(store) {
   return React.useSyncExternalStore(store.listen, store.get, store.get)
 }
@@ -153,6 +154,9 @@ const ctx = {
   source: 'plugin:devin',
   rest: async (p, opts) => {
     restCalls.push([p, opts])
+    if (p === '/brand/devin') {
+      return { svg: '<svg viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>' }
+    }
     if (p.startsWith('/runs?')) {
       return { runs: [running, failed, done, followUp], live: true }
     }
@@ -210,7 +214,7 @@ const thread = render('finished card', directive.render({ attrs: { id: done.id }
 check('the follow-up box sits only on the newest run of a thread', (thread.match(/Send to Devin/g) || []).length === 1)
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
-const page = render('page', byArea('routes')[0].render(), ['Devin', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+const page = render('page', byArea('routes')[0].render(), ['Devin × Hermes', 'nous-girl-dark.png', 'mask-image', 'Devin is at work', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
 check('follow-ups are not listed as separate history rows', !page.includes('Follow-up: also add tests'))
 render('review tab', React.createElement(pluginModule.__testing.ReviewPane, { runId: running.id, ctx }),
   ['Add type hints', 'utils.py', '+def add(a: int, b: int) -&gt; int:', 'Show in folder'])
