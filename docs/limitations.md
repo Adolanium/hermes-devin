@@ -4,8 +4,9 @@
   but the account may reject a model at launch. Missing pricing is unknown, not free.
   Saved values that become unavailable fail closed; they are never silently replaced.
   Cloud execution requires the separate target selector and Cloud consent, not a Local
-  model selection. Real account discovery is verified, but paid Cloud execution and
-  cancellation still need a separately approved live test.
+  model selection. A live Lite/no-repository Cloud launch and confirmed cancellation
+  passed. Cloud follow-ups and reconnect remain covered by fake-CLI tests, not live
+  execution. See [validation scope](cloud-sessions.md#validation-scope).
 
 - **Cloud permissions are remote.** Local permission modes, sandboxing, fenced folders
   and per-tool approval cards do not govern Cloud actions. A relay disconnect does
