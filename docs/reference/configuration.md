@@ -62,7 +62,7 @@ plugins:
 | `card_approvals` | `true` | | Background runs started from Hermes Desktop show Devin's requests on their run card, with Allow and Deny buttons, instead of denying them. |
 | `card_approval_timeout_seconds` | `300` | 30 to 3600 | How long a request waits on the run card before it is denied. |
 | `approval_scope` | `run` | `run`, `workspace` | What a remembered "always/session" approval covers: only the identical request, or any prompt in the same folder and mode. |
-| `allowed_roots` | `[]` | list of paths, or one path | When set, runs may only start inside these directories. |
+| `allowed_roots` | `[]` | list of paths, or one path | When set, Local runs may only start inside these directories. Cloud runs never use a local folder and are not limited by it. |
 | `default_cwd` | `""` | path | Folder used when the call gives no `cwd`. Empty: Hermes' terminal working directory, then the process directory. A relative `cwd` is resolved against this. |
 | `sandbox` | `false` | bool | Devin's `--sandbox`. Required by `autonomous`. Not supported on native Windows and rejected there. |
 | `trust_workspace` | `false` | bool | Print backend only: passes `--respect-workspace-trust false`. |
