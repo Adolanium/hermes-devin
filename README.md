@@ -57,7 +57,9 @@ In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands 
 - a **Stop** button that ends the run and everything it started
 - a **Tell Devin…** box under a finished run: your follow-up continues the same Devin session, so Devin remembers the work, and it appears as the next card in the thread
 
-A **Devin** page in the sidebar lists active runs and history, a status-bar chip shows while Devin is working, and you get a notification when a run finishes, even if you've switched to another app.
+**Review changes** opens a tab with every file Devin changed in the run, each with its full diff.
+
+A **Devin** page in the sidebar lists active runs and history, and has a **New Devin task** box that opens a chat with your request. A status-bar chip shows while Devin is working and turns into **Devin needs you** when a run is waiting for your answer. Your pet says what Devin is editing or running, and you get a notification when a run finishes or needs you, even if you've switched to another app.
 
 The Desktop half ships in the same folder as the plugin and starts switched off. Turn it on under **Capabilities → Plugins → Devin**.
 
