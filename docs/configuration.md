@@ -70,6 +70,11 @@ plugins:
 | `preflight_auth_check` | `true` | Run `devin auth status` before a run. Success is cached for five minutes. |
 | `extra_env` | `{}` | Extra environment variables for Devin. Cannot set `DEVIN_PERMISSION_MODE`; the plugin always sets that from `permission_mode`. |
 
+Desktop's [Local model controls](model-controls.md) override `model` only for the
+approved run and its follow-ups. They use server-advertised values, not extra config
+schema fields. Local defaults are profile-scoped and saved after approval when
+`persist_runs` is enabled; ordinary chat delegation still uses the plugin setting.
+
 ## Time and size limits
 
 | Setting | Default | Range | What it does |

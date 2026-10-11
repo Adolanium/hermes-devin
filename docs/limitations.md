@@ -1,5 +1,10 @@
 # Known limitations
 
+- **Model catalogs are not entitlements.** Local model controls show current ACP choices,
+  but the account may reject a model at launch. Missing pricing is unknown, not free.
+  Saved values that become unavailable fail closed; they are never silently replaced.
+  Cloud execution is not enabled by these Local controls.
+
 - **Concurrent runs are refused, not queued.** When `max_concurrent_runs` is reached, a new run is refused, and the model is told to wait or cancel one.
 - **Background runs outside Hermes Desktop cannot ask you anything.** There, Devin's in-run permission prompts are denied. Background runs started from Desktop ask on their run card instead, and are denied if nobody answers in time. Use `accept-edits` or a wider mode if background runs need to edit files on their own.
 - **Background notices need a way in.** Outside the classic CLI, completion notices need `allow_gateway_injection: true` on the plugin entry. Without it, results are still available through `devin_run_result` and `/devin status`.

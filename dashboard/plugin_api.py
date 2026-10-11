@@ -53,6 +53,11 @@ _SUMMARY_KEYS = (
     "usage",
     "error",
     "schema_version",
+    "model",
+    "model_label",
+    "model_cost_summary",
+    "model_confirmed",
+    "session_config",
 )
 _DETAIL_EVENTS = 60
 
@@ -65,11 +70,23 @@ def runs_dir() -> Path | None:
     return plugin_data_dir("devin") / "runs"
 
 
-def live_plugin() -> Any | None:
+def live_plugin(*, load: bool = False) -> Any | None:
     """The agent half loaded in this process (a ``DevinPlugin``), if any."""
-    for name, module in list(sys.modules.items()):
-        if not name.startswith("hermes_plugins.") or name.count(".") != 1:
-            continue
+    try:
+        from hermes_cli.plugins import discover_plugins, get_plugin_manager
+    except ImportError:
+        modules = [
+            module
+            for name, module in list(sys.modules.items())
+            if name.startswith("hermes_plugins.") and name.count(".") == 1
+        ]
+    else:
+        # The host registry owns profile scoping, enabled state and trust checks.
+        if load:
+            discover_plugins()
+        manager = get_plugin_manager()
+        modules = [loaded.module for loaded in manager._plugins.values() if loaded.enabled]
+    for module in modules:
         if getattr(module, "TOOLSET", None) != "delegation" or not callable(getattr(module, "get_plugin", None)):
             continue
         try:
@@ -263,6 +280,24 @@ else:
         if status != 200:
             raise HTTPException(status_code=status, detail=payload["detail"])
         return payload
+
+    @router.post("/session-options")
+    def _session_options(body: dict) -> dict[str, Any]:
+        plugin = live_plugin(load=True)
+        if plugin is None:
+            raise HTTPException(
+                status_code=409,
+                detail="The Devin agent plugin is not loaded in this profile. Check that it is enabled.",
+            )
+        try:
+            return plugin.session_options(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            # Discovery errors can contain CLI stderr; never return raw transport logs.
+            raise HTTPException(
+                status_code=409, detail="Could not load model choices. Check CLI login and workspace access."
+            ) from exc
 
     @router.post("/runs/{run_id}/cancel")
     def _cancel(run_id: str) -> dict[str, Any]:

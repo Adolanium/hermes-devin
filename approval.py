@@ -39,9 +39,13 @@ TICKET_TTL_SECONDS = 15 * 60
 EXCERPT_CHARS = 1500
 
 
-def fingerprint(args: dict[str, Any]) -> str:
+def fingerprint(args: dict[str, Any], cfg: DevinConfig | None = None) -> str:
     """Stable hash of the arguments a ticket was issued for."""
-    relevant = {k: args.get(k) for k in ("prompt", "cwd", "background", "timeout_seconds", "title")}
+    relevant = {k: args.get(k) for k in ("prompt", "cwd", "background", "timeout_seconds", "title", "launch_id")}
+    if cfg is not None:
+        from .session_controls import config_fingerprint
+
+        relevant["config"] = config_fingerprint(cfg)
     blob = json.dumps(relevant, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
@@ -54,7 +58,9 @@ def rule_key_for(cfg: DevinConfig, prompt: str, cwd: str) -> str:
     (default) also hashes the prompt, so a remembered approval only covers the
     identical request; ``workspace`` covers any prompt in that directory.
     """
-    parts = [cfg.permission_mode, cfg.backend, cwd.lower() if cwd else ""]
+    from .session_controls import config_fingerprint
+
+    parts = [cfg.permission_mode, cfg.backend, cwd.lower() if cwd else "", config_fingerprint(cfg)]
     if cfg.approval_scope == "run":
         parts.append(prompt)
     digest = hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:16]
@@ -63,6 +69,9 @@ def rule_key_for(cfg: DevinConfig, prompt: str, cwd: str) -> str:
 
 
 def approval_message(cfg: DevinConfig, *, prompt: str, cwd: str, background: bool, timeout: int) -> str:
+    options = getattr(cfg, "session_options", ())
+    label = getattr(cfg, "model_label", "") or cfg.model or "configured CLI default"
+    pricing = getattr(cfg, "model_cost_summary", "")
     excerpt = " ".join(prompt.split())
     if len(excerpt) > EXCERPT_CHARS:
         # Say how much is hidden, so a long prompt cannot tuck instructions out of view unnoticed.
@@ -82,6 +91,9 @@ def approval_message(cfg: DevinConfig, *, prompt: str, cwd: str, background: boo
         f"Start a Devin run in {cwd or '(current directory)'}; "
         f"permission mode '{cfg.permission_mode}' ({mode_note}); "
         f"{'background' if background else 'foreground'}, timeout {timeout}s, backend {cfg.backend}. "
+        f"Model: {label}"
+        f"{'; ' + ', '.join(f'{key}: {value}' for key, value in options if key != 'model') if options else ''}. "
+        f"{'Catalog pricing: ' + pricing + '. ' if pricing else 'Pricing unavailable; usage may incur charges. '}"
         f"Task: {excerpt}"
     )
 

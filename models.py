@@ -251,6 +251,11 @@ class Run:
     updated_at: float = field(default_factory=time.time)
     pid: int | None = None
     devin_session_id: str = ""
+    session_config: dict[str, str] = field(default_factory=dict)
+    config_options: list[dict[str, Any]] = field(default_factory=list)
+    model_label: str = ""
+    model_cost_summary: str = ""
+    model_confirmed: bool = False
     stop_reason: str = ""
     exit_code: int | None = None
     approval: ApprovalRecord | None = None
@@ -347,6 +352,11 @@ class Run:
                 "cwd": self.cwd,
                 "permission_mode": self.permission_mode,
                 "backend": self.backend,
+                "model": self.model,
+                "model_label": self.model_label,
+                "model_cost_summary": self.model_cost_summary,
+                "model_confirmed": self.model_confirmed,
+                "session_config": dict(self.session_config),
                 "created_at": self.created_at,
                 "started_at": self.started_at,
                 "finished_at": self.finished_at,
@@ -394,6 +404,7 @@ class Run:
                     "schema_version": SCHEMA_VERSION,
                     "prompt": self.prompt,
                     "model": self.model,
+                    "config_options": self.config_options,
                     "timeout_seconds": self.timeout_seconds,
                     "session_id": self.session_id,
                     "session_key": self.session_key,

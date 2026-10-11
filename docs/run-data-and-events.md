@@ -18,6 +18,11 @@ Each run is one `Run` record (`models.py`). Its JSON snapshot carries `schema_ve
 
 The summary used in lists and event envelopes is a subset: id, title, state, background, cwd, mode, backend, timestamps, duration, the tool call count, the changed files, the permission request count, last activity, usage and error.
 
+Model selections add `session_config`, sanitized `config_options`, `model_label`,
+`model_cost_summary` and `model_confirmed` to the snapshot. The configuration includes
+only supported model controls, never permission overrides or arbitrary ACP metadata.
+Summaries include confirmed values and labels, but not the full option catalog.
+
 ## States
 
 ```text

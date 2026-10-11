@@ -42,6 +42,13 @@ SCHEMAS: dict[str, dict] = {
                     "description": "Stop Devin after this many seconds (capped by settings).",
                 },
                 "title": {"type": "string", "description": "Short label for listings (optional)."},
+                "launch_id": {
+                    "type": "string",
+                    "description": (
+                        "Single-use saved launch selection supplied by the user's Desktop form. Forward it exactly "
+                        "when supplied; never invent one. Model and permission overrides are not accepted here."
+                    ),
+                },
             },
             "required": ["prompt"],
             "additionalProperties": False,

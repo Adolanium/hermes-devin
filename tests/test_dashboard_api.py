@@ -93,3 +93,29 @@ def test_devin_mark_comes_from_the_local_devin_app(tmp_path):
     assert api.devin_mark([missing, scripted, not_svg, good]).startswith("<svg")
     assert api.devin_mark([missing, scripted]) is None
     assert all(str(p).endswith("letterpress-dark.svg") for p in api.devin_mark_candidates())
+
+
+def test_live_model_controls_use_active_profile_registry_not_other_modules(monkeypatch):
+    import sys
+    import types
+
+    api = _api()
+    expected = types.SimpleNamespace(manager=object())
+    foreign = types.SimpleNamespace(manager=object())
+    current_module = types.SimpleNamespace(TOOLSET="delegation", get_plugin=lambda: expected)
+    foreign_module = types.SimpleNamespace(TOOLSET="delegation", get_plugin=lambda: foreign)
+    monkeypatch.setitem(sys.modules, "hermes_plugins.foreign", foreign_module)
+    registry = {"devin": types.SimpleNamespace(enabled=True, module=current_module)}
+    host = types.ModuleType("hermes_cli.plugins")
+    host.get_plugin_manager = lambda: types.SimpleNamespace(_plugins=registry)
+    loaded = []
+    host.discover_plugins = lambda: loaded.append(True)
+    parent = types.ModuleType("hermes_cli")
+    parent.__path__ = []
+    monkeypatch.setitem(sys.modules, "hermes_cli", parent)
+    monkeypatch.setitem(sys.modules, "hermes_cli.plugins", host)
+    assert api.live_plugin(load=True) is expected and loaded == [True]
+    registry["devin"].enabled = False
+    assert api.live_plugin() is None
+    registry.clear()
+    assert api.live_plugin() is None

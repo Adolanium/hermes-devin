@@ -61,6 +61,11 @@ In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands 
 
 A **Devin** page in the sidebar lists active runs and history, and has a **New Devin task** box that opens a chat with your request. A status-bar chip shows while Devin is working and turns into **Devin needs you** when a run is waiting for your answer. Your pet says what Devin is editing or running, and you get a notification when a run finishes or needs you, even if you've switched to another app.
 
+**New Devin task** also lets you search the Local models and Fusion pairings advertised by
+your CLI session. Thinking and other model controls appear when supported. The selection
+is confirmed before the task, shown in the approval and saved with the run. These settings
+do not change Hermes' chat model or your permission mode. See [Local model controls](docs/model-controls.md).
+
 The Desktop half ships in the same folder as the plugin and starts switched off. Turn it on under **Capabilities → Plugins → Devin**.
 
 The trioexagon icon ships with the plugin and works offline. Devin Desktop is not required;
@@ -183,6 +188,7 @@ Want Devin's hosted tools in Hermes too? The [Devin MCP server](docs/devin-mcp.m
 
 - [How it works](docs/how-it-works.md): run lifecycle, ACP vs print backend
 - [Configuration reference](docs/configuration.md): every setting, its default and its limits
+- [Local model controls](docs/model-controls.md): model and Fusion selection, thinking, pricing and saved defaults
 - [Approval and permissions](docs/approval-and-permissions.md): the approval gate and how the permission mode is enforced
 - [Process trees on Windows and POSIX](docs/process-tree.md): how runs are stopped and cleaned up
 - [Run data and events](docs/run-data-and-events.md): the run model, stored snapshots and live events for Desktop

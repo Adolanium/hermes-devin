@@ -126,6 +126,43 @@ class Agent:
         self.responses: dict[int, dict] = {}
         self.response_ready = threading.Condition()
         self.next_id = 1000
+        self.config_values = {"model": "base-medium", "thought_level": "medium"}
+        self.current_mode = "normal"
+        if "--model" in sys.argv:
+            self.config_values["model"] = sys.argv[sys.argv.index("--model") + 1]
+
+    def config_options(self) -> list[dict]:
+        fusion = self.config_values["model"].startswith("fusion-")
+        thinking = ["low", "medium", "high"] if fusion else ["medium", "high"]
+        return [
+            {
+                "id": "mode",
+                "name": "Permission mode",
+                "category": "mode",
+                "type": "select",
+                "currentValue": self.current_mode,
+                "options": [{"value": "bypass", "name": "Bypass"}],
+            },
+            {
+                "id": "model",
+                "name": "Model",
+                "category": "model",
+                "type": "select",
+                "currentValue": self.config_values["model"],
+                "options": [
+                    {"value": "base-medium", "name": "Base"},
+                    {"value": "fusion-frontier-medium-sidekick-economy-medium", "name": "Fusion (Frontier + Economy)"},
+                ],
+            },
+            {
+                "id": "thought_level",
+                "name": "Thinking",
+                "category": "thought_level",
+                "type": "select",
+                "currentValue": self.config_values["thought_level"],
+                "options": [{"value": value, "name": value.title()} for value in thinking],
+            },
+        ]
 
     def request(self, method: str, params: dict) -> dict:
         self.next_id += 1
@@ -139,6 +176,13 @@ class Agent:
     def handle_prompt(self, rid: int, params: dict) -> None:
         sid = self.session
         prompt = "".join(b.get("text", "") for b in params.get("prompt", []))
+        if SCENARIO == "config_changed":
+            self.config_values["model"] = "base-medium"
+            update(sid, {"sessionUpdate": "config_option_update", "configOptions": self.config_options()})
+            for _ in range(100):
+                if self.cancelled.wait(0.05):
+                    send({"jsonrpc": "2.0", "id": rid, "result": {"stopReason": "cancelled"}})
+                    return
         if SCENARIO == "crash":
             os._exit(3)
         if SCENARIO == "refusal":
@@ -366,6 +410,8 @@ class Agent:
                     }
                 )
             elif method == "session/new":
+                if SCENARIO == "config_discovery_hang":
+                    time.sleep(300)
                 if SCENARIO == "auth":
                     send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": "Authentication required"}})
                     continue
@@ -392,7 +438,10 @@ class Agent:
                             {"id": "bypass", "name": "Bypass"},
                         ],
                     }
-                send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": self.session, "modes": modes}})
+                result = {"sessionId": self.session, "modes": modes}
+                if SCENARIO.startswith("config"):
+                    result["configOptions"] = self.config_options()
+                send({"jsonrpc": "2.0", "id": rid, "result": result})
             elif method == "session/load":
                 wanted = str((msg.get("params") or {}).get("sessionId") or "")
                 if wanted == "missing-session":
@@ -402,24 +451,40 @@ class Agent:
                 self.session = wanted
                 update(wanted, {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "old ask"}})
                 text_chunk(wanted, "REPLAYED OLD ANSWER")
-                send(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": rid,
-                        "result": {
-                            "modes": {
-                                "currentModeId": "normal",
-                                "availableModes": [
-                                    {"id": "normal", "name": "Normal"},
-                                    {"id": "accept-edits", "name": "Accept Edits"},
-                                    {"id": "plan", "name": "Plan"},
-                                    {"id": "bypass", "name": "Bypass"},
-                                ],
-                            }
-                        },
+                result = {
+                    "modes": {
+                        "currentModeId": "normal",
+                        "availableModes": [
+                            {"id": "normal", "name": "Normal"},
+                            {"id": "accept-edits", "name": "Accept Edits"},
+                            {"id": "plan", "name": "Plan"},
+                            {"id": "bypass", "name": "Bypass"},
+                        ],
                     }
-                )
+                }
+                if SCENARIO.startswith("config"):
+                    result["configOptions"] = self.config_options()
+                send({"jsonrpc": "2.0", "id": rid, "result": result})
+            elif method == "session/set_config_option":
+                params = msg.get("params") or {}
+                if SCENARIO == "config_rejected":
+                    send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32602, "message": "Model unavailable"}})
+                    continue
+                ident, value = params.get("configId"), params.get("value")
+                self.config_values[ident] = value
+                if ident == "model":
+                    self.config_values["thought_level"] = "medium"
+                    self.current_mode = "bypass"
+                if SCENARIO == "config_canonical" and ident == "thought_level":
+                    self.config_values["model"] = "fusion-frontier-high-sidekick-economy-medium"
+                update(self.session, {"sessionUpdate": "config_option_update", "configOptions": self.config_options()})
+                send({"jsonrpc": "2.0", "id": rid, "result": {"configOptions": self.config_options()}})
             elif method == "session/set_mode":
+                self.current_mode = (msg.get("params") or {}).get("modeId")
+                if SCENARIO.startswith("config"):
+                    update(
+                        self.session, {"sessionUpdate": "config_option_update", "configOptions": self.config_options()}
+                    )
                 send({"jsonrpc": "2.0", "id": rid, "result": {}})
             elif method == "session/prompt":
                 threading.Thread(target=self.handle_prompt, args=(rid, msg.get("params") or {}), daemon=True).start()
@@ -434,6 +499,26 @@ class Agent:
 
 def main() -> int:
     argv = sys.argv[1:]
+    if argv[:2] == ["models", "list"]:
+        print(
+            json.dumps(
+                {
+                    "families": [
+                        {
+                            "family_label": "Fusion",
+                            "variants": [
+                                {
+                                    "model_uid": "fusion-frontier-medium-sidekick-economy-medium",
+                                    "label": "Fusion (Frontier Medium + Economy Medium)",
+                                    "cost_summary": "Catalog price supplied by CLI",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
+        return 0
     if argv[:2] == ["auth", "status"]:
         return auth_status()
     if "--print" in argv or "-p" in argv:
