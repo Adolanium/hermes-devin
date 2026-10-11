@@ -3,7 +3,15 @@
 - **Model catalogs are not entitlements.** Local model controls show current ACP choices,
   but the account may reject a model at launch. Missing pricing is unknown, not free.
   Saved values that become unavailable fail closed; they are never silently replaced.
-  Cloud execution is not enabled by these Local controls.
+  Cloud execution requires the separate target selector and Cloud consent, not a Local
+  model selection. Real account discovery is verified, but paid Cloud execution and
+  cancellation still need a separately approved live test.
+
+- **Cloud permissions are remote.** Local permission modes, sandboxing, fenced folders
+  and per-tool approval cards do not govern Cloud actions. A relay disconnect does
+  not prove remote cancellation. Unknown remote activity blocks follow-ups; a read-only
+  reconnect does not prove it is idle. No arbitrary-session attach, handoff or pickup
+  is implemented. See [Cloud sessions](cloud-sessions.md).
 
 - **Concurrent runs are refused, not queued.** When `max_concurrent_runs` is reached, a new run is refused, and the model is told to wait or cancel one.
 - **Background runs outside Hermes Desktop cannot ask you anything.** There, Devin's in-run permission prompts are denied. Background runs started from Desktop ask on their run card instead, and are denied if nobody answers in time. Use `accept-edits` or a wider mode if background runs need to edit files on their own.

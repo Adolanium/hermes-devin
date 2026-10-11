@@ -20,6 +20,7 @@ late reader thread cannot resurrect a cancelled run.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 import uuid
@@ -256,6 +257,9 @@ class Run:
     model_label: str = ""
     model_cost_summary: str = ""
     model_confirmed: bool = False
+    execution_target: str = "local"
+    cloud_permissions_ack: bool = False
+    remote_state: str = "not_started"
     stop_reason: str = ""
     exit_code: int | None = None
     approval: ApprovalRecord | None = None
@@ -356,6 +360,9 @@ class Run:
                 "model_label": self.model_label,
                 "model_cost_summary": self.model_cost_summary,
                 "model_confirmed": self.model_confirmed,
+                "execution_target": self.execution_target,
+                "remote_state": self.remote_state if self.execution_target == "cloud" else "",
+                "cloud_url": self.cloud_url(),
                 "session_config": dict(self.session_config),
                 "created_at": self.created_at,
                 "started_at": self.started_at,
@@ -387,6 +394,12 @@ class Run:
                             files.append(path)
         return files
 
+    def cloud_url(self) -> str:
+        ident = self.devin_session_id
+        if self.execution_target == "cloud" and re.fullmatch(r"(?:devin-)?[a-f0-9]{32}", ident or ""):
+            return f"https://app.devin.ai/sessions/{ident.removeprefix('devin-')}"
+        return ""
+
     def _last_activity(self) -> str:
         for event in reversed(self.events):
             if event.kind in ("tool_call", "tool_update", "status", "plan", "permission"):
@@ -403,6 +416,7 @@ class Run:
                 {
                     "schema_version": SCHEMA_VERSION,
                     "prompt": self.prompt,
+                    "cloud_permissions_ack": self.cloud_permissions_ack,
                     "model": self.model,
                     "config_options": self.config_options,
                     "timeout_seconds": self.timeout_seconds,

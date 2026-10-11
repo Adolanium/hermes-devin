@@ -168,6 +168,10 @@ check('search includes Fusion sidekick labels', pluginModule.__testing.groupedMo
 check('empty search matches are not a fallback', pluginModule.__testing.groupedModels(modelChoices, 'not-present').length === 0)
 const selectedTask = pluginModule.__testing.taskRequest('fix it', '/work', true, { launch_id: 'opaque-selection', cwd: '/work' })
 check('task forwards opaque launch id without raw model overrides', selectedTask.includes('launch_id "opaque-selection"') && !selectedTask.includes('fusion-pair'))
+const cloudTask = pluginModule.__testing.taskRequest('fix it', '/private/local-folder', true, {
+  launch_id: 'cloud-selection', cwd: '/private/local-folder', execution_target: 'cloud'
+})
+check('Cloud task forwards only its launch reference and no local path', cloudTask.includes('Have Devin Cloud') && cloudTask.includes('cloud-selection') && !cloudTask.includes('/private/local-folder'))
 const fields = React.createElement(pluginModule.__testing.ModelFields, { loading: false, onChange() {}, data: {
   cwd: '/work', permission_mode: 'normal', config_options: [
     { id: 'model', name: 'Model', currentValue: 'fusion-pair', options: modelChoices },
@@ -177,6 +181,15 @@ const fields = React.createElement(pluginModule.__testing.ModelFields, { loading
 const fieldsHtml = renderToStaticMarkup(fields)
 check('model picker renders grouped Fusion and conditional thinking', fieldsHtml.includes('optgroup') && fieldsHtml.includes('Sidekick') && fieldsHtml.includes('Thinking'))
 check('model picker shows catalog price and unchanged permissions', fieldsHtml.includes('Catalog pricing: variable') && fieldsHtml.includes('normal permissions'))
+const cloudFields = renderToStaticMarkup(React.createElement(pluginModule.__testing.ModelFields, {
+  loading: false, onChange() {}, data: { execution_target: 'cloud', cwd: '/private/local-folder',
+    config_options: [
+      { id: 'repos', name: 'Repository', currentValue: 'repo-one', options: [{ value: 'repo-one', name: 'Project one' }] },
+      { id: 'devin_version', name: 'Model', currentValue: 'devin-auto', options: [{ value: 'devin-auto', name: 'Fusion' }] },
+      { id: 'platform', name: 'Platform', currentValue: 'linux', options: [{ value: 'linux', name: 'Ubuntu' }] }
+    ] }
+}))
+check('Cloud picker shows advertised controls and Cloud permissions only', cloudFields.includes('Project one') && cloudFields.includes('Fusion') && cloudFields.includes('Ubuntu') && cloudFields.includes('Cloud-managed permissions') && !cloudFields.includes('/private/local-folder'))
 
 const state = globalThis.__devinSmoke
 const restCalls = []
@@ -249,6 +262,15 @@ const thread = render('finished card', directive.render({ attrs: { id: done.id }
   ['Create hello.txt', 'Done', 'hello.txt', 'Follow-up: also add tests', 'Send to Devin', 'Tell Devin what to do next'])
 check('the follow-up box sits only on the newest run of a thread', (thread.match(/Send to Devin/g) || []).length === 1)
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
+const cloudRun = { ...failed, id: 'dv-eeeeeeeeee', execution_target: 'cloud', remote_state: 'unknown', backend: 'acp',
+  cloud_url: 'https://app.devin.ai/sessions/11111111111111111111111111111111' }
+details[cloudRun.id] = { ...details[running.id], ...cloudRun, devin_session_id: 'devin-11111111111111111111111111111111' }
+for (const fn of state.listeners['plugin.devin.run.progress'] || []) {
+  fn({ payload: { type: 'run.progress', run_id: cloudRun.id, run: cloudRun, profile_scope: 'default-scope' } })
+}
+const cloudCard = render('Cloud card', directive.render({ attrs: { id: cloudRun.id }, streaming: false }),
+  ['Remote activity unknown', 'Cloud-managed permissions', 'Open Cloud session', 'Reconnect'])
+check('unknown Cloud activity does not offer follow-ups or local file actions', !cloudCard.includes('Send to Devin') && !cloudCard.includes('Show in folder'))
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
 const page = render('page', byArea('routes')[0].render(), ['Devin <span', 'Hermes', 'nous-girl-dark.png', 'mask-image', '1 working', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
 check('the mark does not need an installed app', !restCalls.some(([p]) => p === '/brand/devin'))

@@ -3,10 +3,10 @@ version: 0.1.0
 manifest_version: 2
 api_version: 1
 description: >-
-  Delegate coding tasks to the local Devin CLI. Every run needs your approval,
-  the permission mode comes from plugin settings only, progress streams live
-  over ACP, long tasks run in the background, and stopping a run kills Devin's
-  whole process tree.
+  Delegate coding tasks through Devin CLI, locally or in Devin Cloud. Every
+  launch needs Hermes approval. Local runs keep your permission settings and
+  process cleanup; Cloud runs require Cloud-managed-permissions confirmation
+  and report whether remote cancellation was confirmed.
 author: Adolanium
 license: MIT
 kind: standalone

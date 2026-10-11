@@ -59,6 +59,9 @@ _SUMMARY_KEYS = (
     "model_cost_summary",
     "model_confirmed",
     "session_config",
+    "execution_target",
+    "remote_state",
+    "cloud_url",
 )
 _DETAIL_EVENTS = 60
 
@@ -139,7 +142,12 @@ def _load(path: Path) -> dict[str, Any] | None:
 
 
 def _summary(data: dict[str, Any]) -> dict[str, Any]:
-    return {k: data.get(k) for k in _SUMMARY_KEYS if k in data}
+    out = {k: data.get(k) for k in _SUMMARY_KEYS if k in data}
+    if "cloud_url" in out and not re.fullmatch(
+        r"https://app\.devin\.ai/sessions/[a-f0-9]{32}", str(out["cloud_url"] or "")
+    ):
+        out["cloud_url"] = ""
+    return out
 
 
 def run_list_response(root: Path | None, state: str = "all", limit: int = 50, manager: Any = None) -> dict:
@@ -303,6 +311,20 @@ else:
             raise HTTPException(
                 status_code=409, detail="Could not load model choices. Check CLI login and workspace access."
             ) from exc
+
+    @router.post("/runs/{run_id}/reconnect")
+    def _reconnect(run_id: str) -> dict[str, Any]:
+        if not _RUN_ID.fullmatch(run_id):
+            raise HTTPException(status_code=400, detail="Expected a run id.")
+        plugin = live_plugin(load=True)
+        if plugin is None:
+            raise HTTPException(status_code=409, detail="The Devin agent plugin is not loaded in this profile.")
+        result = plugin.reconnect(run_id)
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=409, detail=(result.get("error") or {}).get("message") or "Reconnect failed."
+            )
+        return result
 
     @router.post("/runs/{run_id}/cancel")
     def _cancel(run_id: str) -> dict[str, Any]:

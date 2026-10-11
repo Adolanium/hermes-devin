@@ -239,10 +239,12 @@ class AcpBackend:
     @staticmethod
     def build_argv(io: RunIO) -> list[str]:
         argv = list(io.argv)
-        if io.sandbox:
+        if io.sandbox and io.run.execution_target != "cloud":
             argv.append("--sandbox")
         argv.append("acp")
-        if io.model:
+        if io.run.execution_target == "cloud":
+            argv.append("--cloud")
+        elif io.model:
             argv += ["--model", io.model]
         return argv
 
@@ -260,7 +262,7 @@ class AcpBackend:
             for option in update.get("configOptions") or []:
                 if isinstance(option, dict) and option.get("id") == "mode":
                     self._observe_mode(io, option.get("currentValue"))
-            options = model_options(update.get("configOptions") or [])
+            options = model_options(update.get("configOptions") or [], target=run.execution_target)
             if getattr(self, "_config_ready", False):
                 required = getattr(self, "_selected_values", {})
                 confirmed = option_values(options)
@@ -364,7 +366,13 @@ class AcpBackend:
         try:
             try:
                 session = peer.request(
-                    "session/load", {"sessionId": session_id, "cwd": io.run.cwd, "mcpServers": []}, timeout=timeout
+                    "session/load",
+                    {
+                        "sessionId": session_id,
+                        "cwd": "/" if io.run.execution_target == "cloud" else io.run.cwd,
+                        "mcpServers": [],
+                    },
+                    timeout=timeout,
                 )
             except RpcError as exc:
                 raise RuntimeError(f"Devin could not resume session {session_id}: {exc.message}") from exc
@@ -449,6 +457,10 @@ class AcpBackend:
             io.emit("terminal", snapshot["command"][:200], **snapshot)
 
     def _on_request(self, io: RunIO, method: str, params: dict) -> Any:
+        if io.run.execution_target == "cloud":
+            if method == "session/request_permission":
+                return {"outcome": {"outcome": "cancelled"}}
+            raise RpcError(METHOD_NOT_FOUND, "Cloud sessions cannot access local tools or files")
         if method == "session/request_permission":
             return self._answer_permission(io, params)
         # We advertise no fs/terminal capabilities and cannot answer questions
@@ -470,7 +482,7 @@ class AcpBackend:
     # -- run ----------------------------------------------------------------
 
     def _capture_config(self, io: RunIO, raw: Any) -> None:
-        options = model_options(raw)
+        options = model_options(raw, target=io.run.execution_target)
         if not options and raw is None:
             return
         values = option_values(options)
@@ -478,14 +490,15 @@ class AcpBackend:
             run = io.run
             run.config_options = options
             run.session_config = values
-            run.model_confirmed = "model" in values
-            if "model" in values:
-                model = next(option for option in options if option["id"] == "model")
-                choice = next((item for item in model["options"] if item["value"] == values["model"]), {})
-                if values["model"] != run.model or not run.model_label:
-                    run.model_label = choice.get("name") or values["model"]
+            model_id = "devin_version" if run.execution_target == "cloud" else "model"
+            run.model_confirmed = model_id in values
+            if model_id in values:
+                model = next(option for option in options if option["id"] == model_id)
+                choice = next((item for item in model["options"] if item["value"] == values[model_id]), {})
+                if values[model_id] != run.model or not run.model_label:
+                    run.model_label = choice.get("name") or values[model_id]
                     run.model_cost_summary = ""
-                run.model = values["model"]
+                run.model = values[model_id]
         io.emit("config", "model configuration confirmed", values=values)
 
     def _observe_mode(self, io: RunIO, value: Any) -> None:
@@ -549,6 +562,8 @@ class AcpBackend:
         try:
             return self._drive(io, tree, peer, stderr)
         finally:
+            if io.run.execution_target == "cloud" and io.run.remote_state in ("running", "cancel_requested"):
+                io.run.remote_state = "unknown"
             # Normal exit or not, nothing Devin started may outlive the run.
             if tree.poll() is None:
                 try:
@@ -631,10 +646,17 @@ class AcpBackend:
                     agent_version=agent.get("version") if isinstance(agent, dict) else None,
                 )
             resume = io.run.resume_session_id
+            cloud = io.run.execution_target == "cloud"
+            if cloud and not io.run.cloud_permissions_ack:
+                raise ControlsError("Cloud-managed permissions were not confirmed. No task was sent.")
             if resume:
+                if cloud and not init.get("agentCapabilities", {}).get("loadSession"):
+                    raise ControlsError("The Cloud server does not support reconnecting this session.")
                 session = self._load_session(io, peer, resume, budget())
             else:
-                session = peer.request("session/new", {"cwd": io.run.cwd, "mcpServers": []}, timeout=budget())
+                session = peer.request(
+                    "session/new", {"cwd": "/" if cloud else io.run.cwd, "mcpServers": []}, timeout=budget()
+                )
             if not isinstance(session, dict) or not session.get("sessionId"):
                 raise RpcError(-32603, "session/new returned no sessionId")
             self._session_id = str(session["sessionId"])
@@ -645,12 +667,20 @@ class AcpBackend:
             if io.model and model_options(session.get("configOptions")):
                 values.setdefault("model", io.model)
             self._selected_values = values
-            options = apply_options(peer, self._session_id, session.get("configOptions"), values, timeout=budget)
+            options = apply_options(
+                peer,
+                self._session_id,
+                session.get("configOptions"),
+                values,
+                timeout=budget,
+                target=io.run.execution_target,
+            )
             self._capture_config(io, options)
             if any(io.run.session_config.get(key) != value for key, value in values.items()):
                 raise ControlsError("Devin changed a requested model setting. No task was sent; choose again.")
             # Model setters must not be able to leave the agent in a wider mode.
-            self._select_mode(io, peer, session, force=bool(values))
+            if not cloud:
+                self._select_mode(io, peer, session, force=bool(values))
             if any(io.run.session_config.get(key) != value for key, value in values.items()):
                 raise ControlsError("Devin changed model settings while applying permissions. No task was sent.")
             self._config_ready = True
@@ -666,6 +696,11 @@ class AcpBackend:
                 return Outcome(RunState.FAILED, error=RunError(ErrorCode.REFUSED.value, str(exc)))
             return self._setup_error(exc, stderr, tree)
 
+        if io.cancel_event.is_set() or time.monotonic() >= io.deadline:
+            kill = tree.stop(grace=io.grace).to_dict()
+            return _finish_stopped(io, "cancelled" if io.cancel_event.is_set() else "timeout", kill, stderr.text)
+        if cloud:
+            io.run.remote_state = "running"
         io.mark_running()
         rid, pending = peer.request_async(
             "session/prompt",
@@ -676,6 +711,8 @@ class AcpBackend:
         )
         why = _wait_or_stop(io, pending.event.is_set)
         if why != "done":
+            if cloud:
+                io.run.remote_state = "cancel_requested"
 
             def soft() -> None:
                 # ACP's cancel: the agent ends the turn with stopReason "cancelled".
@@ -690,9 +727,30 @@ class AcpBackend:
 
             # Let the agent wind down its turn before the tree is killed.
             kill = tree.stop(grace=io.grace, soft_stop=soft if not peer.closed.is_set() else None).to_dict()
+            if cloud:
+                confirmed = (
+                    pending.event.is_set()
+                    and pending.error is None
+                    and isinstance(pending.result, dict)
+                    and pending.result.get("stopReason") == "cancelled"
+                )
+                io.run.remote_state = "cancelled" if confirmed else "unknown"
+                kill["remote_cancel_confirmed"] = confirmed
+                if not confirmed:
+                    return Outcome(
+                        RunState.FAILED,
+                        stop_reason="cloud_stop_unconfirmed",
+                        kill_report=kill,
+                        error=RunError(
+                            "cloud_stop_unconfirmed",
+                            "Local relay stopped, but Cloud cancellation was not confirmed. Remote work may still be running.",
+                        ),
+                    )
             return _finish_stopped(io, why, kill, stderr.text)
 
         if pending.error is not None:
+            if cloud:
+                io.run.remote_state = "unknown"
             err = pending.error
             tail = stderr.join(1) if tree.wait(0.5) is not None else stderr.text
             if isinstance(err, RpcError) and (err.code == -32000 or looks_unauthenticated(err.message)):
@@ -732,11 +790,15 @@ class AcpBackend:
                     io.run.usage.update({"tokens": clean})
                 io.emit("usage", "", tokens=clean)
         if stop == "cancelled":
+            if cloud:
+                io.run.remote_state = "cancelled"
             return Outcome(
                 RunState.CANCELLED,
                 stop_reason=stop,
                 error=RunError(ErrorCode.CANCELLED.value, "Devin reported the turn as cancelled"),
             )
+        if cloud:
+            io.run.remote_state = "idle"
         if stop == "refusal":
             return Outcome(
                 RunState.FAILED,

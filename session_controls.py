@@ -18,6 +18,7 @@ from .config import DevinConfig
 from .jsonrpc import METHOD_NOT_FOUND, JsonRpcPeer, PeerClosed, RpcError
 
 MODEL_CATEGORIES = {"model", "model_config", "thought_level"}
+CLOUD_CONTROLS = {"org_id", "repos", "persona_slug", "devin_version", "platform"}
 FORBIDDEN_IDS = {
     "mode",
     "permission_mode",
@@ -73,7 +74,7 @@ def _choices(raw: Any, *, group: str = "", depth: int = 0) -> list[dict]:
     return choices[:2000]
 
 
-def model_options(raw: Any) -> list[dict]:
+def model_options(raw: Any, *, target: str = "local") -> list[dict]:
     """Drop permission controls, unsupported types, and arbitrary agent metadata."""
     if not isinstance(raw, list):
         return []
@@ -85,14 +86,16 @@ def model_options(raw: Any) -> list[dict]:
         ident, category = _text(item.get("id")), item.get("category")
         if not ident or ident in seen or ident in FORBIDDEN_IDS:
             continue
-        if category not in MODEL_CATEGORIES or item.get("type") != "select":
+        allowed = ident in CLOUD_CONTROLS if target == "cloud" else category in MODEL_CATEGORIES
+        if not allowed or item.get("type") != "select":
             continue
         current = item.get("currentValue")
         if not isinstance(current, str) or len(current) > 512:
             continue
         choices = _choices(item.get("options"))
-        if current and not any(choice["value"] == current for choice in choices):
-            choices.insert(0, {"value": current, "name": current})
+        if (current or target == "cloud") and not any(choice["value"] == current for choice in choices):
+            empty_label = "No repository" if ident == "repos" else "Agent" if ident == "persona_slug" else "Default"
+            choices.insert(0, {"value": current, "name": current or empty_label})
         if not choices:
             continue
         seen.add(ident)
@@ -100,7 +103,7 @@ def model_options(raw: Any) -> list[dict]:
             {
                 "id": ident,
                 "name": _text(item.get("name")) or ident,
-                "category": category,
+                "category": "cloud" if target == "cloud" else category,
                 "type": "select",
                 "currentValue": current,
                 "options": choices,
@@ -114,14 +117,21 @@ def option_values(options: list[dict]) -> dict[str, str]:
 
 
 def apply_options(
-    peer: JsonRpcPeer, session_id: str, raw: Any, values: dict[str, str], *, timeout: Any = lambda: 30.0
+    peer: JsonRpcPeer,
+    session_id: str,
+    raw: Any,
+    values: dict[str, str],
+    *,
+    timeout: Any = lambda: 30.0,
+    target: str = "local",
 ) -> list[dict]:
-    options = model_options(raw)
+    options = model_options(raw, target=target)
     if not isinstance(values, dict) or len(values) > 16:
         raise ControlsError("Model settings must be an object with at most 16 selections.")
     # A model change can replace its thinking/speed options. Validate each
     # subsequent choice against the new response, not the initial catalog.
-    ordered = sorted(values, key=lambda key: (key != "model", key))
+    first = "org_id" if target == "cloud" else "model"
+    ordered = sorted(values, key=lambda key: (key != first, key))
     for ident in ordered:
         value = values[ident]
         option = next((item for item in options if item["id"] == ident), None)
@@ -140,7 +150,7 @@ def apply_options(
             },
             timeout=timeout(),
         )
-        options = model_options(result.get("configOptions") if isinstance(result, dict) else None)
+        options = model_options(result.get("configOptions") if isinstance(result, dict) else None, target=target)
         confirmed = next((item for item in options if item["id"] == ident), None)
         if confirmed is None or confirmed["currentValue"] != value:
             raise ControlsError(f"Devin did not confirm the selected '{option['name']}'. No task was sent.")
@@ -149,6 +159,8 @@ def apply_options(
 
 @dataclass(frozen=True)
 class LaunchConfig(DevinConfig):
+    execution_target: str = "local"
+    cloud_permissions_ack: bool = False
     session_options: tuple[tuple[str, str], ...] = ()
     model_label: str = ""
     model_cost_summary: str = ""
@@ -178,17 +190,28 @@ class SessionControls:
         self._closed = False
         self._trees: set[Any] = set()
 
-    def issue(self, base: DevinConfig, cwd: str, options: list[dict]) -> str:
+    def issue(
+        self,
+        base: DevinConfig,
+        cwd: str,
+        options: list[dict],
+        *,
+        target: str = "local",
+        cloud_permissions_ack: bool = False,
+    ) -> str:
         values = option_values(options)
-        if "model" not in values or not values["model"]:
+        model_id = "devin_version" if target == "cloud" else "model"
+        if model_id not in values or not values[model_id]:
             raise ControlsError("Devin did not advertise a selectable model. Use plugin defaults explicitly.")
-        model = next(option for option in options if option["id"] == "model")
-        choice = next((item for item in model["options"] if item["value"] == values["model"]), {})
+        model = next(option for option in options if option["id"] == model_id)
+        choice = next((item for item in model["options"] if item["value"] == values[model_id]), {})
         selected = LaunchConfig.from_config(
             base,
-            model=values["model"],
+            execution_target=target,
+            cloud_permissions_ack=cloud_permissions_ack,
+            model=values[model_id] if target == "local" else "",
             session_options=tuple(values.items()),
-            model_label=choice.get("label") or choice.get("name") or values["model"],
+            model_label=choice.get("label") or choice.get("name") or values[model_id],
             model_cost_summary=choice.get("cost_summary") or "",
         )
         nonce = secrets.token_hex(24)
@@ -232,7 +255,7 @@ class SessionControls:
             self._trees.add(tree)
             return tree
 
-    def defaults(self) -> dict[str, str]:
+    def defaults(self, target: str = "local") -> dict[str, str]:
         root = self.manager.store.root
         if root is None:
             return {}
@@ -240,7 +263,7 @@ class SessionControls:
             path = root.parent / "session-preferences.json"
             if path.stat().st_size > 16_000:
                 return {}
-            values = json.loads(path.read_text(encoding="utf-8")).get("local", {})
+            values = json.loads(path.read_text(encoding="utf-8")).get(target, {})
             if (
                 isinstance(values, dict)
                 and len(values) <= 16
@@ -271,7 +294,7 @@ class SessionControls:
                         pass
                 if not isinstance(preferences, dict):
                     preferences = {}
-                preferences["local"] = values
+                preferences[getattr(cfg, "execution_target", "local")] = values
                 root.parent.mkdir(parents=True, exist_ok=True)
                 fd, tmp = tempfile.mkstemp(prefix=".session-preferences.", dir=root.parent)
                 with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -286,7 +309,17 @@ class SessionControls:
                 except OSError:
                     pass
 
-    def discover(self, cfg: DevinConfig, cwd: str, values: dict[str, str]) -> dict:
+    def discover(
+        self,
+        cfg: DevinConfig,
+        cwd: str,
+        values: dict[str, str],
+        *,
+        target: str = "local",
+        cloud_permissions_ack: bool = False,
+    ) -> dict:
+        if target not in ("local", "cloud") or not isinstance(cloud_permissions_ack, bool):
+            raise ControlsError("Choose Local or Cloud and confirm Cloud permissions explicitly.")
         if cfg.backend != "acp":
             raise ControlsError(
                 "Model controls need backend: acp. The print backend still uses plugin settings.",
@@ -296,8 +329,8 @@ class SessionControls:
             raise ControlsError("Model discovery is busy. Try again shortly.", code="discovery_busy")
         try:
             argv = self.manager.preflight(cfg)
-            options = self._probe(cfg, cwd, argv, values)
-            catalog = self._catalog(cfg, cwd, argv)
+            options = self._probe(cfg, cwd, argv, values, target=target)
+            catalog = self._catalog(cfg, cwd, argv) if target == "local" else {}
             for option in options:
                 if option["category"] != "model":
                     continue
@@ -306,10 +339,11 @@ class SessionControls:
             return {
                 "ok": True,
                 "cwd": cwd,
-                "permission_mode": cfg.permission_mode,
+                "execution_target": target,
+                "permission_mode": cfg.permission_mode if target == "local" else "cloud-managed",
                 "config_options": options,
                 "values": option_values(options),
-                "launch_id": self.issue(cfg, cwd, options),
+                "launch_id": self.issue(cfg, cwd, options, target=target, cloud_permissions_ack=cloud_permissions_ack),
             }
         finally:
             self._probes.release()
@@ -320,16 +354,51 @@ class SessionControls:
             return {"outcome": {"outcome": "cancelled"}}
         raise RpcError(METHOD_NOT_FOUND, "Discovery does not run tools")
 
-    def _probe(self, cfg: DevinConfig, cwd: str, argv: list[str], values: dict[str, str]) -> list[dict]:
+    def reconnect(self, cfg: DevinConfig, cwd: str, session_id: str, expected: dict[str, str]) -> list[dict]:
+        if cfg.backend != "acp":
+            raise ControlsError("Reconnect requires backend: acp.")
+        if not self._probes.acquire(blocking=False):
+            raise ControlsError("Session discovery is busy. Try again shortly.")
+        try:
+            options = self._probe(
+                cfg, cwd, self.manager.preflight(cfg), {}, target="cloud", resume_session_id=session_id
+            )
+            actual = option_values(options)
+            if not expected or any(actual.get(key) != value for key, value in expected.items()):
+                raise ControlsError(
+                    "The Cloud session settings differ from this run. Open the Cloud session to check them; no task was sent."
+                )
+            return options
+        finally:
+            self._probes.release()
+
+    def _probe(
+        self,
+        cfg: DevinConfig,
+        cwd: str,
+        argv: list[str],
+        values: dict[str, str],
+        *,
+        target: str = "local",
+        resume_session_id: str = "",
+    ) -> list[dict]:
         from .backends import CLIENT_INFO, _StderrTail
 
         args = list(argv)
-        if cfg.sandbox:
+        if cfg.sandbox and target == "local":
             args.append("--sandbox")
         args.append("acp")
-        if cfg.model:
+        if target == "cloud":
+            args.append("--cloud")
+        elif cfg.model:
             args += ["--model", cfg.model]
-        tree = self._spawn(args, cwd=cwd, env=self.manager._child_env(cfg), stdin=subprocess.PIPE)
+        probe_cfg = LaunchConfig.from_config(cfg, execution_target=target)
+        tree = self._spawn(
+            args,
+            cwd=os.path.abspath(os.sep) if target == "cloud" else cwd,
+            env=self.manager._child_env(probe_cfg),
+            stdin=subprocess.PIPE,
+        )
         stderr = _StderrTail(tree.proc.stderr)
         peer = JsonRpcPeer(
             tree.proc.stdout,
@@ -347,7 +416,7 @@ class SessionControls:
             return min(30, remaining)
 
         try:
-            peer.request(
+            initialized = peer.request(
                 "initialize",
                 {
                     "protocolVersion": 1,
@@ -356,10 +425,21 @@ class SessionControls:
                 },
                 timeout=budget(),
             )
-            session = peer.request("session/new", {"cwd": cwd, "mcpServers": []}, timeout=budget())
+            params = {"cwd": "/" if target == "cloud" else cwd, "mcpServers": []}
+            method = "session/new"
+            if resume_session_id:
+                if not initialized.get("agentCapabilities", {}).get("loadSession"):
+                    raise ControlsError("This ACP server does not support reconnecting sessions.")
+                params["sessionId"] = resume_session_id
+                method = "session/load"
+            session = peer.request(method, params, timeout=budget())
+            if resume_session_id and isinstance(session, dict):
+                session["sessionId"] = resume_session_id
             if not isinstance(session, dict) or not session.get("sessionId"):
                 raise ControlsError("Devin returned no session. Check the CLI login and workspace trust.")
-            return apply_options(peer, str(session["sessionId"]), session.get("configOptions"), values, timeout=budget)
+            return apply_options(
+                peer, str(session["sessionId"]), session.get("configOptions"), values, timeout=budget, target=target
+            )
         except (RpcError, PeerClosed, TimeoutError) as exc:
             raise ControlsError(
                 "Could not load model controls. Check Devin CLI authentication, workspace trust, "

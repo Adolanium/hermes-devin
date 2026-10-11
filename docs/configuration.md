@@ -1,5 +1,11 @@
 # Configuration reference
 
+The Desktop target selector uses ephemeral, approval-bound launch settings, not new
+manifest settings. Cloud requires `backend: acp`; the print backend remains Local.
+Local `model`, `permission_mode`, `sandbox` and workspace-trust settings are not passed
+to Cloud. Cloud preferences are profile-scoped and separate from Local defaults.
+See [Cloud sessions](cloud-sessions.md).
+
 All settings live under `plugins.entries.devin.settings` in Hermes' `config.yaml`. Older setups that use a `config` key in the same place are still read. Hermes Desktop renders the same fields from `config_schema` in `plugin.yaml`.
 
 Values are validated on every read. A bad value refuses runs with a message naming the setting. Booleans also accept `"true"`/`"false"`, `"yes"`/`"no"`, `"on"`/`"off"` and `"1"`/`"0"`.

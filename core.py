@@ -183,6 +183,10 @@ class DevinPlugin:
     def _prepare(self, base: DevinConfig, args: dict) -> tuple[DevinConfig, dict, str]:
         selection = self.controls.resolve(args["launch_id"], base) if "launch_id" in args else None
         cfg = selection.config if selection is not None else base
+        if getattr(cfg, "execution_target", "local") == "cloud" and not getattr(cfg, "cloud_permissions_ack", False):
+            raise ControlsError(
+                "Confirm Cloud-managed permissions before starting a Cloud task.", code="cloud_consent_required"
+            )
         parsed = _parse_delegate_args(cfg, args)
         cwd = resolve_cwd(cfg, parsed["cwd"] or (selection.cwd if selection is not None else None))
         if selection is not None and cwd != selection.cwd:
@@ -190,10 +194,13 @@ class DevinPlugin:
         return cfg, parsed, cwd
 
     def session_options(self, body: dict) -> dict:
-        if not isinstance(body, dict) or set(body) - {"cwd", "values"}:
+        if not isinstance(body, dict) or set(body) - {"cwd", "values", "target", "cloud_permissions_ack"}:
             raise ControlsError("Only cwd and model values can be supplied for discovery.")
         cwd = body.get("cwd")
-        values = body.get("values", self.controls.defaults())
+        target = body.get("target", "local")
+        if target not in ("local", "cloud"):
+            raise ControlsError("Choose Local or Cloud.")
+        values = body.get("values", self.controls.defaults(target))
         if cwd is not None and not isinstance(cwd, str):
             raise ControlsError("The workspace must be a string.")
         if not isinstance(values, dict) or any(
@@ -203,7 +210,13 @@ class DevinPlugin:
         cfg, err = self.config.try_load()
         if cfg is None:
             raise ControlsError(f"Invalid plugin settings: {err}", code="config_invalid")
-        return self.controls.discover(cfg, resolve_cwd(cfg, cwd), values)
+        return self.controls.discover(
+            cfg,
+            resolve_cwd(cfg, cwd),
+            values,
+            target=target,
+            cloud_permissions_ack=body.get("cloud_permissions_ack", False),
+        )
 
     # -- hooks -----------------------------------------------------------------
 
@@ -505,17 +518,52 @@ class DevinPlugin:
         snap = run.snapshot(events=0, include_output=False)
         return _json(
             {
-                "ok": not run.active,
+                "ok": not run.active
+                and (run.execution_target != "cloud" or run.remote_state in ("cancelled", "not_started")),
                 "run_id": run.id,
                 "state": snap["state"],
                 "kill_report": snap["kill_report"],
-                "message": "Devin and its child processes were stopped."
+                "remote_state": snap.get("remote_state"),
+                "message": (
+                    "Cloud cancellation confirmed."
+                    if run.remote_state == "cancelled"
+                    else "Cloud task was not started; local relay stopped."
+                    if run.remote_state == "not_started"
+                    else "Local relay stopped; Cloud work may still be running. Check the Cloud session."
+                )
+                if run.execution_target == "cloud" and not run.active
+                else "Devin and its child processes were stopped."
                 if not run.active
                 else "Stop requested; the run has not exited yet.",
             }
         )
 
     # -- registry glue ---------------------------------------------------------------
+
+    def reconnect(self, run_id: str) -> dict[str, Any]:
+        run, stored = self._lookup(run_id)
+        parent = run.snapshot(events=0, include_output=False) if run is not None else stored
+        if not parent or parent.get("execution_target") != "cloud" or not parent.get("devin_session_id"):
+            return {
+                "ok": False,
+                "error": {"code": "not_resumable", "message": "Only recorded Cloud sessions can reconnect."},
+            }
+        if parent.get("state") in ("created", "starting", "running", "cancelling"):
+            return {"ok": False, "error": {"code": "busy", "message": "The Cloud relay is already active."}}
+        cfg, err = self.config.try_load()
+        if cfg is None:
+            return {"ok": False, "error": {"code": "invalid_settings", "message": err or "Invalid settings."}}
+        try:
+            cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
+            self.controls.reconnect(cfg, cwd, parent["devin_session_id"], parent.get("session_config") or {})
+        except (ControlsError, RunRefused) as exc:
+            return {"ok": False, "error": {"code": exc.code, "message": exc.message}}
+        return {
+            "ok": True,
+            "connection": "reachable",
+            "remote_activity": "unknown",
+            "cloud_url": parent.get("cloud_url") or "",
+        }
 
     def follow_up(self, run_id: str, prompt: str) -> dict[str, Any]:
         """Continue a finished run's Devin session with a message typed on its Desktop run card.
@@ -538,7 +586,7 @@ class DevinPlugin:
         if len(text) > cfg.max_prompt_chars:
             return refuse("invalid_arguments", f"The follow-up is longer than {cfg.max_prompt_chars} characters.")
         run, stored = self._lookup(run_id)
-        parent = run.summary() if run is not None else (stored or {})
+        parent = run.snapshot(events=0, include_output=False) if run is not None else (stored or {})
         if run is not None:
             parent.update(devin_session_id=run.devin_session_id, session_id=run.session_id, session_key=run.session_key)
         if not parent:
@@ -547,16 +595,29 @@ class DevinPlugin:
             return refuse("busy", "Devin is still working on this run. Send the follow-up when it finishes.")
         if parent.get("backend") != "acp" or not parent.get("devin_session_id"):
             return refuse("not_resumable", "Only runs on the ACP backend keep a Devin session to continue.")
+        if parent.get("execution_target") == "cloud" and parent.get("remote_state") not in ("idle", "cancelled"):
+            return refuse(
+                "cloud_state_unknown",
+                "Cloud activity is not confirmed. Check the Cloud session before sending more work.",
+            )
+        if parent.get("execution_target") == "cloud" and not parent.get("session_config"):
+            return refuse("not_resumable", "This Cloud run has no confirmed settings. Start a new Cloud task.")
         if cfg.backend != "acp":
             return refuse("not_resumable", "Follow-ups need backend: acp in the plugin settings.")
         try:
             if parent.get("session_config"):
                 cfg = LaunchConfig.from_config(
                     cfg,
+                    execution_target=str(parent.get("execution_target") or "local"),
+                    cloud_permissions_ack=bool(parent.get("cloud_permissions_ack")),
                     model=str(parent.get("model") or cfg.model),
                     session_options=tuple(parent["session_config"].items()),
                     model_label=str(parent.get("model_label") or ""),
                     model_cost_summary=str(parent.get("model_cost_summary") or ""),
+                )
+            if getattr(cfg, "execution_target", "local") == "cloud" and not cfg.cloud_permissions_ack:
+                return refuse(
+                    "cloud_consent_required", "This Cloud run has no permissions confirmation. Start a new task."
                 )
             cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
             argv = self.manager.preflight(cfg)
