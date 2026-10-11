@@ -23,6 +23,7 @@ has no relative imports.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -162,12 +163,46 @@ def answer_permission(run_id: str, ask_id: str, allow: Any, manager: Any | None)
     return 200, {"ok": True, "allowed": allow}
 
 
+def devin_mark_candidates() -> list[Path]:
+    """Where an installed Devin desktop app keeps its logo (the hexagon mark)."""
+    roots: list[Path] = []
+    if os.environ.get("DEVIN_APP_DIR"):
+        roots.append(Path(os.environ["DEVIN_APP_DIR"]))
+    if os.environ.get("LOCALAPPDATA"):
+        roots.append(Path(os.environ["LOCALAPPDATA"]) / "Programs" / "Devin" / "resources" / "app")
+    roots += [Path("/Applications/Devin.app/Contents/Resources/app"), Path("/usr/share/devin/resources/app"),
+              Path("/opt/Devin/resources/app")]
+    return [root / "out" / "media" / "letterpress-dark.svg" for root in roots]
+
+
+def devin_mark(candidates: list[Path] | None = None) -> str | None:
+    """The Devin mark as SVG text, read from the local Devin app; None when it is not installed.
+
+    The plugin does not ship Devin's logo. The Desktop half uses this SVG only as
+    a mask shape inside an image, so nothing in it can run.
+    """
+    for path in candidates if candidates is not None else devin_mark_candidates():
+        try:
+            if not path.is_file() or path.stat().st_size > 64_000:
+                continue
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if text.lstrip().startswith("<svg") and "<script" not in text.lower():
+            return text
+    return None
+
+
 try:
     from fastapi import APIRouter, HTTPException
 except Exception:  # pragma: no cover - only inside the Hermes dashboard
     router = None
 else:
     router = APIRouter()
+
+    @router.get("/brand/devin")
+    def _devin_mark() -> dict[str, Any]:
+        return {"svg": devin_mark()}
 
     @router.get("/runs")
     def _runs(state: str = "all", limit: int = 50) -> dict[str, Any]:
