@@ -67,6 +67,16 @@ The print backend (`backend: print`) remains as a fallback. Use it for environme
 - Each stdout line becomes a message event.
 - Plan mode is not available in print mode.
 
+## Desktop model selections
+
+Desktop's Local model picker uses `session/new` and `session/set_config_option` in a
+short-lived discovery process, without `session/prompt`. It returns a single-use
+`launch_id` bound to the folder and settings. Hermes forwards that ID through the
+normal approval gate. The task session confirms the selected controls, restores
+the configured permission mode and only then sends the prompt. Model updates are
+recorded; unapproved configuration changes cancel a pinned run. See
+[Local model controls](model-controls.md).
+
 ## Settings are read live
 
 Settings are read and validated on every call, so a change in `config.yaml` applies to the next run without a restart. Invalid settings refuse runs; they never fall back to something more permissive. `persist_runs` is the exception: it is read once at startup.

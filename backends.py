@@ -31,6 +31,7 @@ from typing import Any, Protocol
 
 from .jsonrpc import METHOD_NOT_FOUND, JsonRpcPeer, PeerClosed, RpcError
 from .models import ErrorCode, Run, RunError, RunState
+from .session_controls import ControlsError, apply_options, model_options, option_values
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ class RunIO(Protocol):
     trust_workspace: bool
     sandbox: bool
     model: str
+    session_options: dict[str, str]
     permission_requests: str
 
     def emit(self, kind: str, text: str = "", **data: Any) -> None: ...
@@ -101,6 +103,7 @@ class RunIO(Protocol):
     def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *, request_id: str = "") -> None: ...
     def spawn(self, argv: list[str], *, stdin_pipe: bool) -> Any: ...
     def cancel_reason(self) -> str: ...
+    def cancel(self, reason: str) -> None: ...
 
 
 def looks_unauthenticated(text: str) -> bool:
@@ -246,12 +249,28 @@ class AcpBackend:
     # -- protocol callbacks -------------------------------------------------
 
     def _on_update(self, io: RunIO, params: dict) -> None:
+        if params.get("sessionId") and self._session_id and params["sessionId"] != self._session_id:
+            return
         if self._replaying:
             return
         update = params.get("update") if isinstance(params.get("update"), dict) else {}
         kind = update.get("sessionUpdate")
         run = io.run
-        if kind == "agent_message_chunk":
+        if kind == "config_option_update":
+            for option in update.get("configOptions") or []:
+                if isinstance(option, dict) and option.get("id") == "mode":
+                    self._observe_mode(io, option.get("currentValue"))
+            options = model_options(update.get("configOptions") or [])
+            if getattr(self, "_config_ready", False):
+                required = getattr(self, "_selected_values", {})
+                confirmed = option_values(options)
+                if any(confirmed.get(key) != value for key, value in required.items()):
+                    with run._lock:
+                        run.model_confirmed = False
+                    io.cancel("Devin changed the approved model configuration; no fallback was authorized")
+                    return
+            self._capture_config(io, options)
+        elif kind == "agent_message_chunk":
             text = _text_of(update.get("content"))
             if text:
                 if self._paragraph_break and run.output.value().strip():
@@ -314,6 +333,7 @@ class AcpBackend:
             done = sum(1 for e in entries if e["status"] == "completed")
             io.emit("plan", f"plan: {done}/{len(entries)} done", entries=entries)
         elif kind == "current_mode_update":
+            self._observe_mode(io, update.get("currentModeId"))
             io.emit("mode", str(update.get("currentModeId") or ""))
         elif kind == "usage_update":
             usage: dict[str, Any] = {}
@@ -449,10 +469,40 @@ class AcpBackend:
 
     # -- run ----------------------------------------------------------------
 
-    def _select_mode(self, io: RunIO, peer: JsonRpcPeer, session: dict) -> None:
+    def _capture_config(self, io: RunIO, raw: Any) -> None:
+        options = model_options(raw)
+        if not options and raw is None:
+            return
+        values = option_values(options)
+        with io.run._lock:
+            run = io.run
+            run.config_options = options
+            run.session_config = values
+            run.model_confirmed = "model" in values
+            if "model" in values:
+                model = next(option for option in options if option["id"] == "model")
+                choice = next((item for item in model["options"] if item["value"] == values["model"]), {})
+                if values["model"] != run.model or not run.model_label:
+                    run.model_label = choice.get("name") or values["model"]
+                    run.model_cost_summary = ""
+                run.model = values["model"]
+        io.emit("config", "model configuration confirmed", values=values)
+
+    def _observe_mode(self, io: RunIO, value: Any) -> None:
+        if not isinstance(value, str):
+            return
+        self._observed_mode = value
+        self._mode_revision = getattr(self, "_mode_revision", 0) + 1
+        selected = getattr(self, "_selected_mode", None)
+        if getattr(self, "_config_ready", False) and selected and selected != value:
+            io.cancel("Devin changed the configured permission mode; no override was authorized")
+
+    def _select_mode(self, io: RunIO, peer: JsonRpcPeer, session: dict, *, force: bool = False) -> None:
         modes = session.get("modes") if isinstance(session.get("modes"), dict) else {}
         available = [m for m in modes.get("availableModes") or [] if isinstance(m, dict) and m.get("id")]
         if not available:
+            if force:
+                raise RuntimeError("Devin did not advertise permission modes after model selection. No task was sent.")
             return
         wanted = io.run.permission_mode
         hints = _MODE_HINTS.get(wanted, (wanted,))
@@ -474,8 +524,12 @@ class AcpBackend:
                 f"(offered: {offered}); refusing to run in '{current or 'its default mode'}' instead. "
                 "Use backend 'print', which passes --permission-mode, or pick a mode Devin offers."
             )
-        if match != current:
+        if match != current or force:
+            revision = getattr(self, "_mode_revision", 0)
             peer.request("session/set_mode", {"sessionId": self._session_id, "modeId": match}, timeout=30)
+            if getattr(self, "_mode_revision", 0) != revision and self._observed_mode != match:
+                raise RuntimeError("Devin did not confirm the configured permission mode. No task was sent.")
+        self._selected_mode = match
         io.emit("mode", match)
 
     def execute(self, io: RunIO) -> Outcome:
@@ -586,13 +640,28 @@ class AcpBackend:
             self._session_id = str(session["sessionId"])
             with io.run._lock:
                 io.run.devin_session_id = self._session_id
-            self._select_mode(io, peer, session)
-        except (RpcError, PeerClosed, TimeoutError, RuntimeError) as exc:
+            self._config_ready = False
+            values = dict(getattr(io, "session_options", {}))
+            if io.model and model_options(session.get("configOptions")):
+                values.setdefault("model", io.model)
+            self._selected_values = values
+            options = apply_options(peer, self._session_id, session.get("configOptions"), values, timeout=budget)
+            self._capture_config(io, options)
+            if any(io.run.session_config.get(key) != value for key, value in values.items()):
+                raise ControlsError("Devin changed a requested model setting. No task was sent; choose again.")
+            # Model setters must not be able to leave the agent in a wider mode.
+            self._select_mode(io, peer, session, force=bool(values))
+            if any(io.run.session_config.get(key) != value for key, value in values.items()):
+                raise ControlsError("Devin changed model settings while applying permissions. No task was sent.")
+            self._config_ready = True
+        except (RpcError, PeerClosed, TimeoutError, RuntimeError, ControlsError) as exc:
             if io.cancel_event.is_set() or time.monotonic() >= io.deadline:
                 kill = tree.stop(grace=io.grace).to_dict()
                 return _finish_stopped(
                     io, "timeout" if not io.cancel_event.is_set() else "cancelled", kill, stderr.text
                 )
+            if isinstance(exc, ControlsError):
+                return Outcome(RunState.FAILED, error=RunError(exc.code, str(exc)))
             if isinstance(exc, RuntimeError) and not isinstance(exc, (RpcError, PeerClosed, TimeoutError)):
                 return Outcome(RunState.FAILED, error=RunError(ErrorCode.REFUSED.value, str(exc)))
             return self._setup_error(exc, stderr, tree)

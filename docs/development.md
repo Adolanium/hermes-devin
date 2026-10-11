@@ -19,6 +19,7 @@ The plugin is plain Python 3.11+ with no dependencies beyond Hermes itself.
 | `events.py` | Event envelope and fan-out |
 | `store.py` | Snapshot persistence, pruning, orphans |
 | `schemas.py` | Tool schemas |
+| `session_controls.py` | ACP model discovery, sanitized options and single-use launch selections |
 | `slash.py` | `/devin` command |
 | `dashboard/plugin_api.py` | Runs API for the Desktop half; `manifest.json` mounts it |
 | `desktop/plugin.js` | Desktop half: live run card, Devin page, status-bar chip |
@@ -53,6 +54,8 @@ What the suite covers:
 - **Permissions:** permission modes and in-run permission requests
 - **Stopping:** interrupts, cancels, timeouts and real process-tree kills, including descendants in separate POSIX groups/sessions, normal-exit cleanup, unrelated-process protection and PID reuse, plus mocked Windows kill paths
 - **Parts:** settings, the run model, events, the store, the slash command and the dashboard API
+- **Models:** discovery without prompts, Fusion, conditional thinking, canonical IDs,
+  approval identity, workspace/settings binding, saved defaults, stale values and fallback cancellation
 
 `tests/test_desktop_half.py` renders the Desktop half under Node: it loads `desktop/plugin.js` with a stub `@hermes/plugin-sdk` and the real React from a Hermes Agent install, feeds it run events and renders the card, the page and the status-bar chip, so a typo in a `jsx()` call fails here instead of in Desktop. It needs `node` and a `node_modules` with `react` and `react-dom` (set `HERMES_DESKTOP_NODE_MODULES`, or it looks in the usual Hermes install folders); otherwise it is skipped. Run it directly with `node tests/desktop_smoke.mjs <node_modules>`.
 

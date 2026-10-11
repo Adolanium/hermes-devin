@@ -1057,6 +1057,14 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
       live && run.last_activity && compact
         ? jsx('div', { style: { ...S.muted, ...S.mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: run.last_activity })
         : null,
+      !compact && (run.model_label || run.model || Object.keys(run.session_config || {}).length) ? jsxs('div', {
+        style: { ...S.muted, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, overflowWrap: 'anywhere' },
+        children: [
+          jsx('span', { children: `${run.model_confirmed ? 'Confirmed' : 'Requested'} model: ${run.model_label || run.model || 'CLI default'}` }),
+          jsx('span', { children: Object.entries(run.session_config || {}).filter(([key]) => key !== 'model').map(([key, value]) => `${key}: ${value}`).join(' · ') }),
+          jsx('span', { children: run.model_cost_summary ? `Catalog pricing: ${run.model_cost_summary}` : 'Pricing not supplied; usage may incur charges.' })
+        ]
+      }) : null,
       compact ? null : jsx(Plan, { plan: data.plan }),
       compact ? null : jsx(Changes, { diffs: views.diffs, cwd: run.cwd, os: ctx && ctx.os, live }),
       views.diffs.length && !compact ? null : jsx(Files, { files, cwd: run.cwd, os: ctx && ctx.os }),
@@ -1265,22 +1273,139 @@ async function askHermes(text) {
   return host.composer.setDraft ? host.composer.setDraft(null, text) : false
 }
 
+const MODEL_INPUT = {
+  minWidth: 0, width: '100%', minHeight: 32, padding: '5px 8px', borderRadius: 7,
+  border: '1px solid var(--ui-stroke-secondary)', background: 'var(--ui-widget-surface-background)',
+  color: 'var(--ui-text-primary)', font: 'inherit', outlineColor: 'var(--ui-accent)'
+}
+
+function groupedModels(choices, query = '') {
+  const groups = new Map()
+  const needle = query.trim().toLocaleLowerCase()
+  for (const choice of choices || []) {
+    const family = choice.family || choice.group || (choice.name.startsWith('Fusion') ? 'Fusion' : 'Models')
+    if (needle && !`${family} ${choice.label || choice.name} ${choice.description || ''}`.toLocaleLowerCase().includes(needle)) {
+      continue
+    }
+    if (!groups.has(family)) groups.set(family, [])
+    groups.get(family).push(choice)
+  }
+  return [...groups.entries()]
+}
+
+function taskRequest(what, where, background, selection) {
+  const task = `Have Devin ${what.replace(/^have devin\s+/i, '')}${where ? ` in ${where}` : ''}.${background ? ' Run it in the background and tell me when it is done.' : ''}`
+  return selection
+    ? `${task}\nUse the saved launch_id ${JSON.stringify(selection.launch_id)} exactly in delegate_to_devin. Keep it out of the task prompt. The saved settings belong to ${JSON.stringify(selection.cwd)}; do not substitute model or permission arguments.`
+    : task
+}
+
+function ModelFields({ data, loading, onChange }) {
+  const [search, setSearch] = useState('')
+  const model = (data.config_options || []).find(option => option.id === 'model')
+  const picked = model && model.options.find(choice => choice.value === model.currentValue)
+  const groups = model ? groupedModels(model.options, search) : []
+  const visible = groups.some(([, choices]) => choices.some(choice => choice.value === model.currentValue))
+  if (model && picked && !visible) groups.unshift(['Selected', [picked]])
+
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 10 },
+    children: [
+      model ? jsxs('label', {
+        style: { display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12 },
+        children: ['Search models and Fusion pairings', jsx('input', {
+          type: 'search', value: search, placeholder: 'Search by family, lead or sidekick',
+          onChange: event => setSearch(event.target.value), style: MODEL_INPUT
+        })]
+      }) : null,
+      jsxs('div', {
+        style: { display: 'flex', flexWrap: 'wrap', gap: 10 },
+        children: (data.config_options || []).map(option => jsxs('label', {
+          style: { flex: option.id === 'model' ? '2 1 300px' : '1 1 140px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12 },
+          children: [option.name, jsx('select', {
+            value: option.currentValue, disabled: loading, style: MODEL_INPUT,
+            onChange: event => onChange(option, event.target.value),
+            children: option.id === 'model'
+              ? groups.map(([family, choices]) => jsx('optgroup', { label: family, children: choices.map(choice => jsx('option', {
+                value: choice.value, children: choice.label || choice.name
+              }, choice.value)) }, family))
+              : option.options.map(choice => jsx('option', { value: choice.value, children: choice.name }, choice.value))
+          })]
+        }, option.id))
+      }),
+      search && groups.every(([family]) => family === 'Selected')
+        ? jsx('span', { role: 'status', style: { ...S.muted, fontSize: 12 }, children: 'No matching models. Clear the search to see the available choices.' }) : null,
+      jsxs('div', {
+        style: { fontSize: 12, ...S.muted, display: 'flex', flexDirection: 'column', gap: 4, overflowWrap: 'anywhere' },
+        children: [
+          jsx('span', { children: `Local · ${data.cwd} · ${data.permission_mode} permissions` }),
+          jsx('span', { children: picked && picked.cost_summary ? `Catalog pricing: ${picked.cost_summary}` : 'Pricing not supplied; usage may incur charges.' }),
+          jsx('span', { children: 'Availability is checked again at launch. Catalog prices are not a usage quote. These choices affect Devin, not the Hermes chat model.' })
+        ]
+      })
+    ]
+  })
+}
+
 function NewTask() {
   const [task, setTask] = useState('')
   const [folder, setFolder] = useState('')
   const [background, setBackground] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [advanced, setAdvanced] = useState(false)
+  const [choices, setChoices] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const serial = useRef(0)
+
+  useEffect(() => () => { serial.current += 1 }, [])
+
+  const discover = async (values) => {
+    const request = ++serial.current
+    setLoading(true)
+    setError('')
+    try {
+      const body = { cwd: folder.trim() }
+      if (values !== undefined) body.values = values
+      const data = await rest('/session-options', { method: 'POST', body })
+      if (request !== serial.current) return null
+      if (!data || !data.launch_id || !(data.config_options || []).length) {
+        throw new Error('This CLI did not return model controls. Update Devin CLI or use plugin defaults explicitly.')
+      }
+      setChoices(data)
+      return data
+    } catch (err) {
+      if (request === serial.current) {
+        setChoices(null)
+        setError(err.message || 'Could not load models. Check CLI login and folder access, then retry.')
+      }
+      return null
+    } finally {
+      if (request === serial.current) setLoading(false)
+    }
+  }
+
+  const changeOption = (option, value) => {
+    // Re-read conditional thinking/speed controls after the model changes.
+    const values = option.id === 'model' ? { model: value } : { ...choices.values, [option.id]: value }
+    void discover(values)
+  }
 
   const start = async () => {
     const what = task.trim()
 
-    if (!what || busy) {
+    if (!what || busy || loading || (advanced && !choices)) {
       return
     }
 
     const where = folder.trim()
-    const text = `Have Devin ${what.replace(/^have devin\s+/i, '')}${where ? ` in ${where}` : ''}.${background ? ' Run it in the background and tell me when it is done.' : ''}`
     setBusy(true)
+    const selection = advanced ? await discover(choices.values) : null
+    if (advanced && !selection) {
+      setBusy(false)
+      return
+    }
+    const text = taskRequest(what, where, background, selection)
     const sent = await askHermes(text)
     setBusy(false)
 
@@ -1324,7 +1449,15 @@ function NewTask() {
         children: [
           jsx('input', {
             value: folder,
-            onChange: event => setFolder(event.target.value),
+            'aria-label': 'Local folder',
+            disabled: busy,
+            onChange: event => {
+              serial.current += 1
+              setFolder(event.target.value)
+              setChoices(null)
+              setLoading(false)
+              setError('')
+            },
             placeholder: 'Folder (optional), e.g. E:\\Dev\\myapp',
             style: {
               flex: '1 1 260px',
@@ -1346,7 +1479,38 @@ function NewTask() {
               'In the background'
             ]
           }),
-          jsx(Button, { size: 'sm', variant: 'default', disabled: busy || !task.trim(), onClick: start, children: busy ? 'Opening chat…' : 'Ask Hermes' })
+          jsx(Button, { size: 'sm', variant: 'default', disabled: busy || loading || !task.trim() || (advanced && !choices), onClick: start, children: busy ? 'Preparing task…' : 'Ask Hermes' })
+        ]
+      }),
+      jsxs('div', {
+        style: { borderTop: '1px solid var(--ui-stroke-secondary)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 },
+        children: [
+          jsxs('div', {
+            style: { ...S.row, flexWrap: 'wrap' },
+            children: [
+              jsx(Button, {
+                size: 'sm', variant: 'ghost', disabled: busy || loading, 'aria-expanded': advanced,
+                onClick: () => { setAdvanced(true); void discover() },
+                children: advanced ? 'Refresh model choices' : 'Choose a model or Fusion pairing'
+              }),
+              advanced ? jsx(Button, {
+                size: 'sm', variant: 'ghost', disabled: busy,
+                onClick: () => { serial.current += 1; setAdvanced(false); setLoading(false); setChoices(null); setError('') },
+                children: 'Use plugin defaults'
+              }) : jsx('span', { style: { ...S.muted, fontSize: 12 }, children: 'Local · Plugin defaults' }),
+              loading ? jsxs('span', { role: 'status', style: { ...S.row, ...S.muted, fontSize: 12 }, children: [jsx(GlyphSpinner, {}), 'Checking Devin CLI…'] }) : null
+            ]
+          }),
+          error ? jsxs('div', {
+            role: 'alert', style: { fontSize: 12, color: 'var(--ui-red)', overflowWrap: 'anywhere' },
+            children: [jsx('p', { style: { margin: '0 0 6px' }, children: error }), jsx(Button, {
+              size: 'sm', variant: 'ghost', disabled: loading || busy, onClick: () => { void discover({}) }, children: 'Reload available models'
+            })]
+          }) : null,
+          advanced && choices ? jsx(ModelFields, { data: choices, loading: loading || busy, onChange: changeOption }) : null,
+          advanced && !choices && !error && !loading ? jsx('span', {
+            role: 'status', style: { ...S.muted, fontSize: 12 }, children: 'The folder changed. Refresh model choices before starting.'
+          }) : null
         ]
       }),
       jsx('span', {
@@ -1595,7 +1759,7 @@ function DevinChip() {
 }
 
 // For tests/desktop_smoke.mjs; Hermes Desktop only reads the default export.
-export const __testing = { ReviewPane, askHermes }
+export const __testing = { ReviewPane, askHermes, ModelFields, groupedModels, taskRequest }
 
 // --- plugin ----------------------------------------------------------------------
 

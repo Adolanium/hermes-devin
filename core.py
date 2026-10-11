@@ -30,6 +30,7 @@ from .approval import (
 from .config import ConfigSource, DevinConfig
 from .models import ApprovalRecord, Run, clip
 from .runner import RunManager, RunRefused, resolve_cwd
+from .session_controls import ControlsError, LaunchConfig, SessionControls, config_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,12 @@ _FORBIDDEN_ARGS = {
     "trust_workspace",
     "model",
     "cli_path",
+    "session_options",
+    "config_options",
+    "target",
+    "execution_target",
+    "thought_level",
+    "speed",
 }
 
 
@@ -117,9 +124,11 @@ def _parse_delegate_args(cfg: DevinConfig, args: dict[str, Any]) -> dict[str, An
     if smuggled:
         raise ArgError(
             f"{', '.join(smuggled)} cannot be set per call: Devin's permission mode, model and sandbox come "
-            "only from the plugin settings (plugins.entries.devin.settings)."
+            "from plugin settings or the user's saved Desktop selection, never tool arguments."
         )
-    unknown = sorted(k for k in args if k not in {"prompt", "cwd", "background", "timeout_seconds", "title"})
+    unknown = sorted(
+        k for k in args if k not in {"prompt", "cwd", "background", "timeout_seconds", "title", "launch_id"}
+    )
     if unknown:
         raise ArgError(f"unknown argument(s): {', '.join(unknown)}")
     prompt = args.get("prompt")
@@ -169,6 +178,32 @@ class DevinPlugin:
         self.interrupted = interrupted
         self.session_key = session_key
         self.yield_requested = yield_requested
+        self.controls = SessionControls(manager)
+
+    def _prepare(self, base: DevinConfig, args: dict) -> tuple[DevinConfig, dict, str]:
+        selection = self.controls.resolve(args["launch_id"], base) if "launch_id" in args else None
+        cfg = selection.config if selection is not None else base
+        parsed = _parse_delegate_args(cfg, args)
+        cwd = resolve_cwd(cfg, parsed["cwd"] or (selection.cwd if selection is not None else None))
+        if selection is not None and cwd != selection.cwd:
+            raise ControlsError("The saved selection belongs to another workspace. Choose the model again.")
+        return cfg, parsed, cwd
+
+    def session_options(self, body: dict) -> dict:
+        if not isinstance(body, dict) or set(body) - {"cwd", "values"}:
+            raise ControlsError("Only cwd and model values can be supplied for discovery.")
+        cwd = body.get("cwd")
+        values = body.get("values", self.controls.defaults())
+        if cwd is not None and not isinstance(cwd, str):
+            raise ControlsError("The workspace must be a string.")
+        if not isinstance(values, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in values.items()
+        ):
+            raise ControlsError("Model values must be an object of strings.")
+        cfg, err = self.config.try_load()
+        if cfg is None:
+            raise ControlsError(f"Invalid plugin settings: {err}", code="config_invalid")
+        return self.controls.discover(cfg, resolve_cwd(cfg, cwd), values)
 
     # -- hooks -----------------------------------------------------------------
 
@@ -183,12 +218,11 @@ class DevinPlugin:
         if cfg is None:
             return {"action": "block", "message": _error("config_invalid", f"Devin plugin settings: {err}")}
         try:
-            parsed = _parse_delegate_args(cfg, args)
-            cwd = resolve_cwd(cfg, parsed["cwd"])
+            cfg, parsed, cwd = self._prepare(cfg, args)
             self.manager.resolve_cli(cfg)
         except ArgError as exc:
             return {"action": "block", "message": _error("invalid_arguments", str(exc))}
-        except RunRefused as exc:
+        except (RunRefused, ControlsError) as exc:
             return {"action": "block", "message": _error(exc.code, exc.message)}
         busy = self.manager.capacity_error(cfg)
         if busy:
@@ -197,7 +231,7 @@ class DevinPlugin:
         summary = approval_message(
             cfg, prompt=parsed["prompt"], cwd=cwd, background=parsed["background"], timeout=parsed["timeout"]
         )
-        self.ledger.issue(scope_of(session_id, task_id), fingerprint(args), rule_key, summary)
+        self.ledger.issue(scope_of(session_id, task_id), fingerprint(args, cfg), rule_key, summary)
         return {"action": "approve", "message": summary, "rule_key": rule_key}
 
     def post_approval_response(self, pattern_key: str = "", choice: str = "", **kwargs: Any) -> None:
@@ -208,6 +242,7 @@ class DevinPlugin:
             )
 
     def on_unload(self) -> None:
+        self.controls.close()
         self.manager.shutdown("the Devin plugin was unloaded")
 
     # -- delegate ----------------------------------------------------------------
@@ -216,7 +251,7 @@ class DevinPlugin:
         self, cfg: DevinConfig, args: dict, parsed: dict, cwd: str, task_id: str, session_id: str
     ) -> ApprovalRecord | str:
         now = time.time()
-        ticket = self.ledger.consume(scope_of(session_id, task_id), fingerprint(args))
+        ticket = self.ledger.consume(scope_of(session_id, task_id), fingerprint(args, cfg))
         if ticket is not None:
             return ticket_record(ticket, now)
         # No ticket from our hook: this call did not pass through the normal tool
@@ -241,12 +276,12 @@ class DevinPlugin:
         cfg, err = self.config.try_load()
         if cfg is None:
             return _error("config_invalid", f"Devin plugin settings: {err}")
+        base = cfg
         try:
-            parsed = _parse_delegate_args(cfg, args)
-            cwd = resolve_cwd(cfg, parsed["cwd"])
+            cfg, parsed, cwd = self._prepare(cfg, args)
         except ArgError as exc:
             return _error("invalid_arguments", str(exc))
-        except RunRefused as exc:
+        except (RunRefused, ControlsError) as exc:
             return _error(exc.code, exc.message)
         busy = self.manager.capacity_error(cfg)
         if busy:
@@ -259,6 +294,11 @@ class DevinPlugin:
         if isinstance(approval, str):
             return _error("not_approved", approval)
         try:
+            fresh, _err = self.config.try_load()
+            if fresh is None or config_fingerprint(fresh) != config_fingerprint(base):
+                raise ControlsError("Plugin settings changed during approval. Start the request again.")
+            if "launch_id" in args:
+                self.controls.resolve(args["launch_id"], fresh, consume=True)
             run = self.manager.start(
                 cfg,
                 prompt=parsed["prompt"],
@@ -273,7 +313,8 @@ class DevinPlugin:
                 argv=argv,
                 desktop=_session_platform() == "desktop",
             )
-        except RunRefused as exc:
+            self.controls.remember(cfg)
+        except (RunRefused, ControlsError) as exc:
             return _error(exc.code, exc.message)
         if parsed["background"]:
             return _json(
@@ -509,6 +550,14 @@ class DevinPlugin:
         if cfg.backend != "acp":
             return refuse("not_resumable", "Follow-ups need backend: acp in the plugin settings.")
         try:
+            if parent.get("session_config"):
+                cfg = LaunchConfig.from_config(
+                    cfg,
+                    model=str(parent.get("model") or cfg.model),
+                    session_options=tuple(parent["session_config"].items()),
+                    model_label=str(parent.get("model_label") or ""),
+                    model_cost_summary=str(parent.get("model_cost_summary") or ""),
+                )
             cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
             argv = self.manager.preflight(cfg)
             now = time.time()

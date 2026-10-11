@@ -148,6 +148,25 @@ const pluginModule = await import(pathToFileURL(pluginFile).href)
 const plugin = pluginModule.default
 check('default export has id devin', plugin && plugin.id === 'devin')
 
+const modelChoices = [
+  { value: 'base', name: 'Base', family: 'Base family' },
+  { value: 'fusion-pair', name: 'Fusion pair', family: 'Fusion', label: 'Fusion (Lead + Sidekick)', cost_summary: 'variable' }
+]
+check('groups preserve advertised values', pluginModule.__testing.groupedModels(modelChoices).map(([family]) => family).join(',') === 'Base family,Fusion')
+check('search includes Fusion sidekick labels', pluginModule.__testing.groupedModels(modelChoices, 'SIDEKICK')[0][1][0].value === 'fusion-pair')
+check('empty search matches are not a fallback', pluginModule.__testing.groupedModels(modelChoices, 'not-present').length === 0)
+const selectedTask = pluginModule.__testing.taskRequest('fix it', '/work', true, { launch_id: 'opaque-selection', cwd: '/work' })
+check('task forwards opaque launch id without raw model overrides', selectedTask.includes('launch_id "opaque-selection"') && !selectedTask.includes('fusion-pair'))
+const fields = React.createElement(pluginModule.__testing.ModelFields, { loading: false, onChange() {}, data: {
+  cwd: '/work', permission_mode: 'normal', config_options: [
+    { id: 'model', name: 'Model', currentValue: 'fusion-pair', options: modelChoices },
+    { id: 'thought_level', name: 'Thinking', currentValue: 'high', options: [{ value: 'high', name: 'High' }] }
+  ]
+} })
+const fieldsHtml = renderToStaticMarkup(fields)
+check('model picker renders grouped Fusion and conditional thinking', fieldsHtml.includes('optgroup') && fieldsHtml.includes('Sidekick') && fieldsHtml.includes('Thinking'))
+check('model picker shows catalog price and unchanged permissions', fieldsHtml.includes('Catalog pricing: variable') && fieldsHtml.includes('normal permissions'))
+
 const state = globalThis.__devinSmoke
 const restCalls = []
 const ctx = {

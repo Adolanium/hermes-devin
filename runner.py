@@ -144,6 +144,7 @@ class _RunIO:
         self.trust_workspace = cfg.trust_workspace
         self.sandbox = cfg.sandbox
         self.model = cfg.model
+        self.session_options = dict(getattr(cfg, "session_options", ()))
         self.permission_requests = cfg.permission_requests
         self.card_approvals = cfg.card_approvals
         self.card_timeout = cfg.card_approval_timeout_seconds
@@ -432,6 +433,9 @@ class RunManager:
             backend=cfg.backend,
             permission_mode=cfg.permission_mode,
             model=cfg.model,
+            session_config=dict(getattr(cfg, "session_options", ())),
+            model_label=getattr(cfg, "model_label", ""),
+            model_cost_summary=getattr(cfg, "model_cost_summary", ""),
             background=background,
             timeout_seconds=timeout_seconds,
             session_id=session_id,

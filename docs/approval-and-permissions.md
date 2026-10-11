@@ -43,6 +43,13 @@ When the hook asks for approval, it also leaves a single-use ticket. The ticket 
 
 Hermes does not pass a tool-call id to tool handlers, so the ticket is matched on session plus arguments. Two identical calls in the same session share one ticket slot.
 
+Desktop can supply an opaque `launch_id` for a human-selected Local model and its
+conditional controls. The reference is workspace/settings-bound, expires after 15
+minutes and is consumed only after approval. It does not authorize itself. Selected
+values are part of both the approval ticket and remembered-approval identity, so an
+approval for one selection cannot authorize a different one. Raw model, target and
+permission arguments remain forbidden. See [Local model controls](model-controls.md).
+
 ## Permission modes
 
 | Mode | Devin acts alone on | Devin's prompts | Notes |

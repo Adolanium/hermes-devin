@@ -100,6 +100,7 @@ def register(ctx: Any) -> None:
     import atexit
 
     def _at_exit() -> None:
+        plugin.controls.close()
         plugin.manager.shutdown("Hermes exited", 5.0)
 
     atexit.register(_at_exit)
