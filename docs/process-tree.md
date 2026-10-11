@@ -1,5 +1,9 @@
 # Process trees on Windows and POSIX
 
+These guarantees cover Local processes and the local ACP relay. Cloud work runs on
+a remote VM; killing the relay is not proof it stopped. See
+[Cloud cancellation and recovery](cloud-sessions.md#stop-and-reconnect).
+
 Devin starts shells, test runners, language servers and MCP servers. Killing only the `devin` process would leave all of them running, so each run gets a container for its whole tree.
 
 ## Starting a run

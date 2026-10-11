@@ -1,10 +1,18 @@
 # How it works
 
+The sequence below describes Local execution. A Desktop launch can also supply an
+opaque `launch_id` that binds target-specific selections and consent to approval.
+Cloud uses the same ACP backend with `--cloud`, a neutral remote working directory
+and no Local permission-mode setup. Cancellation requires the original prompt's
+`cancelled` response; a disconnected relay alone means remote activity is unknown.
+Follow-ups and read-only reconnect checks use advertised `session/load` support.
+See [Cloud sessions](cloud-sessions.md).
+
 This page follows one run from the tool call to the result, then explains why the plugin drives Devin over ACP.
 
 ## The life of a run
 
-1. **The model calls `delegate_to_devin`.** Arguments are limited to `prompt`, `cwd`, `background`, `timeout_seconds` and `title`. Anything else is rejected, including any attempt to set the permission mode, model or sandbox.
+1. **The model calls `delegate_to_devin`.** Arguments are limited to `prompt`, `cwd`, `background`, `timeout_seconds`, `title` and an optional opaque `launch_id`. Anything else is rejected, including any attempt to set the permission mode, model or sandbox.
 2. **The `pre_tool_call` hook checks the call.** It validates the settings and arguments, resolves the working directory, finds the Devin CLI and checks the concurrency limit. If the run could never start, the call is blocked with a clear error and you are not asked anything.
 3. **Hermes asks you.** Otherwise the hook answers with an `approve` directive. Hermes shows its normal approval prompt (CLI prompt, gateway buttons or Desktop dialog), naming the folder, the permission mode, foreground or background, the timeout, the backend and the task. See [Approval and permissions](approval-and-permissions.md).
 4. **Preflight.** The handler runs `devin auth status`. A clear "not logged in" answer stops the run with instructions to run `devin auth login`. A successful check is cached for five minutes. Output the plugin does not recognise never blocks a run.

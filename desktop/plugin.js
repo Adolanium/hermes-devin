@@ -485,12 +485,12 @@ function Files({ files, cwd, os }) {
           jsx(
             Tip,
             {
-              label: `${f} — show in folder`,
-              children: jsxs('button', {
-                type: 'button',
+              label: os ? `${f} — show in folder` : f,
+              children: jsxs(os ? 'button' : 'span', {
+                type: os ? 'button' : undefined,
                 className: fresh.has(f) ? 'devin-flash' : undefined,
                 style: S.chip,
-                onClick: () => os && os.revealPath(f),
+                onClick: os ? () => os.revealPath(f) : undefined,
                 children: [
                   jsx(Codicon, { name: 'diff-modified', style: { color: 'var(--ui-diff-add-foreground, var(--ui-green))' } }),
                   jsx('span', {
@@ -972,6 +972,7 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
   const detail = useRunDetail(runId, active)
   const now = useNow(isActive(summary))
   const [stopping, setStopping] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
 
   const data = detail.data || {}
   // The event summary is the freshest; the REST detail adds plan, events, output.
@@ -1011,7 +1012,19 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
   const followUps = Object.values(summaries)
     .filter(r => r.parent_run_id === runId)
     .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+  const cloud = run.execution_target === 'cloud'
   const resumable = run.backend === 'acp' && Boolean(data.devin_session_id)
+    && (!cloud || run.remote_state === 'idle' || run.remote_state === 'cancelled')
+  const cloudUrl = /^https:\/\/app\.devin\.ai\/sessions\/[a-f0-9]{32}$/.test(run.cloud_url || '') ? run.cloud_url : ''
+  const reconnect = async () => {
+    setReconnecting(true)
+    try {
+      await rest(`/runs/${runId}/reconnect`, { method: 'POST' })
+      host.notify({ kind: 'info', message: 'Cloud session is reachable. Remote activity is not confirmed; check the Cloud session before continuing.' })
+    } catch (error) {
+      host.notify({ kind: 'error', message: error?.message || 'Could not reconnect to the Cloud session.' })
+    } finally { setReconnecting(false) }
+  }
   const stop = async () => {
     setStopping(true)
 
@@ -1048,9 +1061,9 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
                     children: [
                       jsx('span', { style: S.mono, children: runId }),
                       '·',
-                      jsx('span', { children: baseName(run.cwd) }),
+                      jsx('span', { children: cloud ? 'Cloud' : baseName(run.cwd) }),
                       '·',
-                      jsx('span', { children: run.permission_mode }),
+                      jsx('span', { children: cloud ? 'Cloud-managed permissions' : run.permission_mode }),
                       run.background ? '· background' : null
                     ]
                   })
@@ -1079,8 +1092,8 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
         ]
       }) : null,
       compact ? null : jsx(Plan, { plan: data.plan }),
-      compact ? null : jsx(Changes, { diffs: views.diffs, cwd: run.cwd, os: ctx && ctx.os, live }),
-      views.diffs.length && !compact ? null : jsx(Files, { files, cwd: run.cwd, os: ctx && ctx.os }),
+      compact ? null : jsx(Changes, { diffs: views.diffs, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os, live }),
+      views.diffs.length && !compact ? null : jsx(Files, { files, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os }),
       compact ? null : jsx(Terminal, { commands: views.commands }),
       compact || !live ? null : jsx(Activity, { events }),
       live ? jsx(PendingRequests, { runId, pending: run.pending_permissions }) : null,
@@ -1156,6 +1169,17 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
           })
         ]
       }),
+      cloud ? jsxs('div', {
+        style: { ...S.row, flexWrap: 'wrap', gap: 10, fontSize: 12, ...S.muted },
+        children: [jsx('span', { role: 'status', children: run.remote_state === 'unknown'
+          ? 'Remote activity unknown; Cloud work may still be running.'
+          : run.remote_state === 'cancelled' ? 'Remote cancellation confirmed.'
+          : run.remote_state === 'idle' ? 'Cloud turn finished; the session remains available.'
+          : run.remote_state === 'cancel_requested' ? 'Waiting for Cloud cancellation confirmation…' : 'Cloud connection active.' }),
+          cloudUrl ? jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.openExternal(cloudUrl), children: 'Open Cloud session' }) : null,
+          !live && data.devin_session_id ? jsx(Button, { size: 'xs', variant: 'ghost', disabled: reconnecting,
+            onClick: reconnect, children: reconnecting ? 'Reconnecting…' : 'Reconnect' }) : null]
+      }) : null,
       compact ? null : jsx(FollowUps, { children: followUps, ctx }),
       !compact && resumable && followUps.length === 0 ? jsx(FollowUpBox, { runId, active: live }) : null
     ]
@@ -1234,7 +1258,7 @@ function ReviewPane({ runId, ctx }) {
                                 jsx('span', { style: { ...S.mono, fontSize: 11.5, color: 'var(--ui-red)' }, children: `−${d.removed || 0}` })
                               ]
                             }),
-                            ctx && ctx.os
+                            ctx && ctx.os && run.execution_target !== 'cloud'
                               ? jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.revealPath(d.path), children: 'Show in folder' })
                               : null
                           ]
@@ -1307,15 +1331,18 @@ function groupedModels(choices, query = '') {
 }
 
 function taskRequest(what, where, background, selection) {
-  const task = `Have Devin ${what.replace(/^have devin\s+/i, '')}${where ? ` in ${where}` : ''}.${background ? ' Run it in the background and tell me when it is done.' : ''}`
+  const cloud = selection?.execution_target === 'cloud'
+  const task = `Have Devin${cloud ? ' Cloud' : ''} ${what.replace(/^have devin\s+/i, '')}${where && !cloud ? ` in ${where}` : ''}.${background ? ' Run it in the background and tell me when it is done.' : ''}`
   return selection
-    ? `${task}\nUse the saved launch_id ${JSON.stringify(selection.launch_id)} exactly in delegate_to_devin. Keep it out of the task prompt. The saved settings belong to ${JSON.stringify(selection.cwd)}; do not substitute model or permission arguments.`
+    ? `${task}\nUse the saved launch_id ${JSON.stringify(selection.launch_id)} exactly in delegate_to_devin. Keep it out of the task prompt. ${cloud ? 'The saved settings target Devin Cloud; do not send local files, folders or MCP servers.' : `The saved settings belong to ${JSON.stringify(selection.cwd)};`} Do not substitute model, target or permission arguments.`
     : task
 }
 
 function ModelFields({ data, loading, onChange }) {
   const [search, setSearch] = useState('')
-  const model = (data.config_options || []).find(option => option.id === 'model')
+  const cloud = data.execution_target === 'cloud'
+  const modelId = cloud ? 'devin_version' : 'model'
+  const model = (data.config_options || []).find(option => option.id === modelId)
   const picked = model && model.options.find(choice => choice.value === model.currentValue)
   const groups = model ? groupedModels(model.options, search) : []
   const visible = groups.some(([, choices]) => choices.some(choice => choice.value === model.currentValue))
@@ -1324,7 +1351,7 @@ function ModelFields({ data, loading, onChange }) {
   return jsxs('div', {
     style: { display: 'flex', flexDirection: 'column', gap: 10 },
     children: [
-      model ? jsxs('label', {
+      model && !cloud ? jsxs('label', {
         style: { display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12 },
         children: ['Search models and Fusion pairings', jsx('input', {
           type: 'search', value: search, placeholder: 'Search by family, lead or sidekick',
@@ -1334,11 +1361,11 @@ function ModelFields({ data, loading, onChange }) {
       jsxs('div', {
         style: { display: 'flex', flexWrap: 'wrap', gap: 10 },
         children: (data.config_options || []).map(option => jsxs('label', {
-          style: { flex: option.id === 'model' ? '2 1 300px' : '1 1 140px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12 },
+          style: { flex: option.id === modelId || option.id === 'repos' ? '2 1 300px' : '1 1 140px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12 },
           children: [option.name, jsx('select', {
             value: option.currentValue, disabled: loading, style: MODEL_INPUT,
             onChange: event => onChange(option, event.target.value),
-            children: option.id === 'model'
+            children: option.id === modelId && !cloud
               ? groups.map(([family, choices]) => jsx('optgroup', { label: family, children: choices.map(choice => jsx('option', {
                 value: choice.value, children: choice.label || choice.name
               }, choice.value)) }, family))
@@ -1351,7 +1378,8 @@ function ModelFields({ data, loading, onChange }) {
       jsxs('div', {
         style: { fontSize: 12, ...S.muted, display: 'flex', flexDirection: 'column', gap: 4, overflowWrap: 'anywhere' },
         children: [
-          jsx('span', { children: `Local · ${data.cwd} · ${data.permission_mode} permissions` }),
+          jsx('span', { children: cloud ? 'Cloud · Remote repositories · Cloud-managed permissions' : `Local · ${data.cwd} · ${data.permission_mode} permissions` }),
+          cloud ? jsx('span', { children: 'Your local folder, uncommitted changes and local MCP servers are not uploaded.' }) : null,
           jsx('span', { children: picked && picked.cost_summary ? `Catalog pricing: ${picked.cost_summary}` : 'Pricing not supplied; usage may incur charges.' }),
           jsx('span', { children: 'Availability is checked again at launch. Catalog prices are not a usage quote. These choices affect Devin, not the Hermes chat model.' })
         ]
@@ -1369,16 +1397,18 @@ function NewTask() {
   const [choices, setChoices] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [target, setTarget] = useState('local')
+  const [cloudAck, setCloudAck] = useState(false)
   const serial = useRef(0)
 
   useEffect(() => () => { serial.current += 1 }, [])
 
-  const discover = async (values) => {
+  const discover = async (values, selectedTarget = target, consent = cloudAck) => {
     const request = ++serial.current
     setLoading(true)
     setError('')
     try {
-      const body = { cwd: folder.trim() }
+      const body = { cwd: selectedTarget === 'cloud' ? '' : folder.trim(), target: selectedTarget, cloud_permissions_ack: consent }
       if (values !== undefined) body.values = values
       const data = await rest('/session-options', { method: 'POST', body })
       if (request !== serial.current) return null
@@ -1400,14 +1430,14 @@ function NewTask() {
 
   const changeOption = (option, value) => {
     // Re-read conditional thinking/speed controls after the model changes.
-    const values = option.id === 'model' ? { model: value } : { ...choices.values, [option.id]: value }
+    const values = option.id === 'model' || option.id === 'org_id' ? { [option.id]: value } : { ...choices.values, [option.id]: value }
     void discover(values)
   }
 
   const start = async () => {
     const what = task.trim()
 
-    if (!what || busy || loading || (advanced && !choices)) {
+    if (!what || busy || loading || (advanced && !choices) || (target === 'cloud' && !cloudAck)) {
       return
     }
 
@@ -1444,6 +1474,21 @@ function NewTask() {
         style: { ...S.row, gap: 8 },
         children: [jsx(Codicon, { name: 'sparkle', style: { color: 'var(--ui-accent)' } }), jsx('span', { style: { fontWeight: 600 }, children: 'New Devin task' })]
       }),
+      jsxs('label', {
+        style: { ...S.row, flexWrap: 'wrap', gap: 10, fontSize: 12.5 },
+        children: ['Run on', jsx('select', {
+          'aria-label': 'Execution target', value: target, disabled: busy,
+          style: { ...MODEL_INPUT, width: 180 },
+          onChange: event => {
+            const value = event.target.value
+            serial.current += 1
+            setTarget(value); setCloudAck(false); setChoices(null); setLoading(false); setError('')
+            setAdvanced(value === 'cloud')
+            if (value === 'cloud') void discover(undefined, value, false)
+          },
+          children: [jsx('option', { value: 'local', children: 'Local computer' }, 'local'), jsx('option', { value: 'cloud', children: 'Devin Cloud' }, 'cloud')]
+        })]
+      }),
       jsx(Textarea, {
         value: task,
         rows: 2,
@@ -1460,7 +1505,7 @@ function NewTask() {
       jsxs('div', {
         style: { ...S.row, flexWrap: 'wrap', gap: 10 },
         children: [
-          jsx('input', {
+          target === 'local' ? jsx('input', {
             value: folder,
             'aria-label': 'Local folder',
             disabled: busy,
@@ -1484,7 +1529,7 @@ function NewTask() {
               font: 'inherit',
               fontSize: 12.5
             }
-          }),
+          }) : null,
           jsxs('label', {
             style: { ...S.row, gap: 6, ...S.muted, fontSize: 12.5, cursor: 'pointer' },
             children: [
@@ -1492,7 +1537,7 @@ function NewTask() {
               'In the background'
             ]
           }),
-          jsx(Button, { size: 'sm', variant: 'default', disabled: busy || loading || !task.trim() || (advanced && !choices), onClick: start, children: busy ? 'Preparing task…' : 'Ask Hermes' })
+          jsx(Button, { size: 'sm', variant: 'default', disabled: busy || loading || !task.trim() || (advanced && !choices) || (target === 'cloud' && !cloudAck), onClick: start, children: busy ? 'Preparing task…' : 'Ask Hermes' })
         ]
       }),
       jsxs('div', {
@@ -1504,13 +1549,13 @@ function NewTask() {
               jsx(Button, {
                 size: 'sm', variant: 'ghost', disabled: busy || loading, 'aria-expanded': advanced,
                 onClick: () => { setAdvanced(true); void discover() },
-                children: advanced ? 'Refresh model choices' : 'Choose a model or Fusion pairing'
+                children: target === 'cloud' ? 'Refresh Cloud choices' : advanced ? 'Refresh model choices' : 'Choose a model or Fusion pairing'
               }),
-              advanced ? jsx(Button, {
+              advanced && target === 'local' ? jsx(Button, {
                 size: 'sm', variant: 'ghost', disabled: busy,
                 onClick: () => { serial.current += 1; setAdvanced(false); setLoading(false); setChoices(null); setError('') },
                 children: 'Use plugin defaults'
-              }) : jsx('span', { style: { ...S.muted, fontSize: 12 }, children: 'Local · Plugin defaults' }),
+              }) : target === 'local' ? jsx('span', { style: { ...S.muted, fontSize: 12 }, children: 'Local · Plugin defaults' }) : null,
               loading ? jsxs('span', { role: 'status', style: { ...S.row, ...S.muted, fontSize: 12 }, children: [jsx(GlyphSpinner, {}), 'Checking Devin CLI…'] }) : null
             ]
           }),
@@ -1521,6 +1566,12 @@ function NewTask() {
             })]
           }) : null,
           advanced && choices ? jsx(ModelFields, { data: choices, loading: loading || busy, onChange: changeOption }) : null,
+          target === 'cloud' ? jsxs('label', {
+            style: { ...S.row, alignItems: 'flex-start', gap: 8, fontSize: 12.5, lineHeight: 1.5 },
+            children: [jsx('input', { type: 'checkbox', checked: cloudAck, disabled: busy,
+              onChange: event => setCloudAck(event.target.checked), style: { marginTop: 3 } }),
+            'I understand that Devin Cloud manages permissions and may incur charges. Hermes Local approvals and sandbox settings do not govern remote actions.']
+          }) : null,
           advanced && !choices && !error && !loading ? jsx('span', {
             role: 'status', style: { ...S.muted, fontSize: 12 }, children: 'The folder changed. Refresh model choices before starting.'
           }) : null

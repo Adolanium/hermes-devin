@@ -36,7 +36,7 @@ finished-run follow-ups restore the confirmed selection instead of new defaults.
 
 Approved choices become the Local defaults for this Hermes profile when `persist_runs`
 is enabled. They are stored in `plugin-data/devin/session-preferences.json`, separately
-from run snapshots and any future Cloud defaults. Merely browsing or denying a task does
+from run snapshots and Cloud defaults. Merely browsing or denying a task does
 not save a default. This preference does not change the CLI's global defaults or apply to
 ordinary chat delegation without a launch reference.
 
@@ -53,4 +53,4 @@ work or widen it to another mode. See [Configuration](configuration.md) and
 [Approval and permissions](approval-and-permissions.md).
 
 This page describes Local execution only. Cloud execution is not enabled by a Local
-model or Fusion selection.
+model or Fusion selection. Use the separate target selector described in [Cloud sessions](cloud-sessions.md).

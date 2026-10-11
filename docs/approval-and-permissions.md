@@ -1,5 +1,11 @@
 # Approval and permissions
 
+Every target requires Hermes approval to launch. The Local permission modes below do
+not govern Cloud actions. Cloud additionally requires an explicit Cloud-managed-permissions
+confirmation bound to the launch reference; its approval shows the target and selected
+repositories, platform and model preset. Closing the relay is not proof of remote
+cancellation. See [Cloud sessions](cloud-sessions.md).
+
 Two separate questions decide what Devin can do:
 
 1. **May this run start at all?** That is Hermes' approval prompt, asked for every run.

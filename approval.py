@@ -69,6 +69,7 @@ def rule_key_for(cfg: DevinConfig, prompt: str, cwd: str) -> str:
 
 
 def approval_message(cfg: DevinConfig, *, prompt: str, cwd: str, background: bool, timeout: int) -> str:
+    cloud = getattr(cfg, "execution_target", "local") == "cloud"
     options = getattr(cfg, "session_options", ())
     label = getattr(cfg, "model_label", "") or cfg.model or "configured CLI default"
     pricing = getattr(cfg, "model_cost_summary", "")
@@ -88,9 +89,13 @@ def approval_message(cfg: DevinConfig, *, prompt: str, cwd: str, background: boo
         "autonomous": "sandboxed, everything but writes auto-approved",
     }.get(cfg.permission_mode, cfg.permission_mode)
     return (
-        f"Start a Devin run in {cwd or '(current directory)'}; "
-        f"permission mode '{cfg.permission_mode}' ({mode_note}); "
-        f"{'background' if background else 'foreground'}, timeout {timeout}s, backend {cfg.backend}. "
+        (
+            "Start a Devin Cloud run; Cloud manages permissions, not Hermes Local approval controls; "
+            "no local folder, files or MCP servers are uploaded; "
+            if cloud
+            else f"Start a Devin run in {cwd or '(current directory)'}; permission mode '{cfg.permission_mode}' ({mode_note}); "
+        )
+        + f"{'background' if background else 'foreground'}, timeout {timeout}s, backend {cfg.backend}. "
         f"Model: {label}"
         f"{'; ' + ', '.join(f'{key}: {value}' for key, value in options if key != 'model') if options else ''}. "
         f"{'Catalog pricing: ' + pricing + '. ' if pricing else 'Pricing unavailable; usage may incur charges. '}"

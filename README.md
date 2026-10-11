@@ -8,9 +8,10 @@
 
   **Hand the coding task to Devin. Keep your hand on the switch.**
 
-  Hermes Devin lets Hermes delegate a coding task to the Devin CLI on your machine.
-  You approve every run, you choose how much Devin may do on its own, and you can
-  stop it at any moment. Every process it started stops with it.
+  Hermes Devin lets Hermes delegate coding tasks through the Devin CLI, locally
+  or in Devin Cloud. You approve every task. Local runs use your permission
+  settings; Cloud runs use Cloud-managed permissions and report whether remote
+  cancellation was confirmed.
 
   <sub>POWERED BY <a href="https://github.com/NousResearch/hermes-agent">HERMES AGENT</a> &nbsp;·&nbsp; COMMUNITY PLUGIN &nbsp;·&nbsp; VERSION 0.1.0</sub>
 
@@ -24,7 +25,9 @@
 
 Hermes Devin is a community-built agent plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It adds tools to Hermes' own `delegation` toolset, asks through Hermes' own approval prompt, and posts results back into the same conversation. It works the same in the CLI, the TUI, Hermes Desktop and the messaging gateway.
 
-Devin runs locally through the [Devin CLI](https://cli.devin.ai) you already installed and logged in to. The plugin does not hold an API key and does not call Devin's cloud API.
+Both targets use the [Devin CLI](https://cli.devin.ai) you installed and logged in to.
+Local runs use `devin acp`; Cloud runs use `devin acp --cloud`. The plugin does not
+store a separate Cloud API key or use a separate Cloud API client.
 
 ## A second pair of hands in the chat
 
@@ -54,14 +57,19 @@ In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands 
 - Devin's requests, with **Allow** and **Deny** buttons for background runs
 - recent tool calls and every permission decision
 - elapsed time, token use, the final answer or the error
-- a **Stop** button that ends the run and everything it started
+- a **Stop** button that cleans up Local processes, or requests Cloud cancellation and reports whether it was confirmed
 - a **Tell Devin…** box under a finished run: your follow-up continues the same Devin session, so Devin remembers the work, and it appears as the next card in the thread
 
 **Review changes** opens a tab with every file Devin changed in the run, each with its full diff.
 
 A **Devin** page in the sidebar lists active runs and history, and has a **New Devin task** box that opens a chat with your request. A status-bar chip shows while Devin is working and turns into **Devin needs you** when a run is waiting for your answer. Your pet says what Devin is editing or running, and you get a notification when a run finishes or needs you, even if you've switched to another app.
 
-**New Devin task** also lets you search the Local models and Fusion pairings advertised by
+**New Devin task** lets you choose **Local computer** or **Devin Cloud**. Cloud exposes
+the account's available organization, repository, platform, persona and model controls,
+including Fusion when advertised. Cloud-managed permissions need a separate confirmation;
+local files and MCP servers are not uploaded. See [Cloud sessions](docs/cloud-sessions.md).
+
+You can also search the Local models and Fusion pairings advertised by
 your CLI session. Thinking and other model controls appear when supported. The selection
 is confirmed before the task, shown in the approval and saved with the run. These settings
 do not change Hermes' chat model or your permission mode. See [Local model controls](docs/model-controls.md).
@@ -72,6 +80,11 @@ The trioexagon icon ships with the plugin and works offline. Devin Desktop is no
 only the standalone CLI is needed for delegation. See [third-party marks](TRADEMARKS.md).
 
 ## You stay in charge
+
+The permission modes, fenced folders and process-tree guarantees below apply to Local
+execution. Cloud still requires Hermes approval to launch, but remote permissions are
+Cloud-managed. Closing the local relay does not prove Cloud work stopped; see
+[Cloud cancellation and recovery](docs/cloud-sessions.md#stop-and-reconnect).
 
 - **Every run needs your yes.** Each run passes through Hermes' approval prompt. If nobody is there to answer, the run does not start.
 - **Permission mode is your setting, not the model's.** `plan`, `normal`, `accept-edits`, `smart`, `dangerous` or `autonomous` come only from the plugin settings. `dangerous` also needs an explicit `allow_dangerous: true`. Hermes cannot pass a mode, a model or a sandbox flag per call.
@@ -189,6 +202,7 @@ Want Devin's hosted tools in Hermes too? The [Devin MCP server](docs/devin-mcp.m
 - [How it works](docs/how-it-works.md): run lifecycle, ACP vs print backend
 - [Configuration reference](docs/configuration.md): every setting, its default and its limits
 - [Local model controls](docs/model-controls.md): model and Fusion selection, thinking, pricing and saved defaults
+- [Cloud sessions](docs/cloud-sessions.md): target-specific choices, remote permissions, cancellation and reconnect checks
 - [Approval and permissions](docs/approval-and-permissions.md): the approval gate and how the permission mode is enforced
 - [Process trees on Windows and POSIX](docs/process-tree.md): how runs are stopped and cleaned up
 - [Run data and events](docs/run-data-and-events.md): the run model, stored snapshots and live events for Desktop

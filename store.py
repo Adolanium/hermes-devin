@@ -140,6 +140,8 @@ class RunStore:
                 continue
             if state in ACTIVE_STATES:
                 data["state"] = RunState.FAILED.value
+                if data.get("execution_target") == "cloud":
+                    data["remote_state"] = "unknown"
                 data["error"] = {
                     "code": "orphaned",
                     "message": "Hermes stopped while this run was active, so its result was never collected.",

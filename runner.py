@@ -203,7 +203,10 @@ class _RunIO:
 
     def spawn(self, argv: list[str], *, stdin_pipe: bool) -> ProcessTree:
         tree = self.manager._spawn(
-            argv, cwd=self.run.cwd, env=self.env, stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL
+            argv,
+            cwd=os.path.abspath(os.sep) if self.run.execution_target == "cloud" else self.run.cwd,
+            env=self.env,
+            stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL,
         )
         with self.run._lock:
             self.run.pid = tree.pid
@@ -433,6 +436,8 @@ class RunManager:
             backend=cfg.backend,
             permission_mode=cfg.permission_mode,
             model=cfg.model,
+            execution_target=getattr(cfg, "execution_target", "local"),
+            cloud_permissions_ack=getattr(cfg, "cloud_permissions_ack", False),
             session_config=dict(getattr(cfg, "session_options", ())),
             model_label=getattr(cfg, "model_label", ""),
             model_cost_summary=getattr(cfg, "model_cost_summary", ""),
@@ -477,6 +482,9 @@ class RunManager:
             env.pop("DEVIN_SANDBOX", None)
         if cfg.model:
             env["DEVIN_MODEL"] = cfg.model
+        if getattr(cfg, "execution_target", "local") == "cloud":
+            for key in ("DEVIN_PERMISSION_MODE", "DEVIN_SANDBOX", "DEVIN_MODEL", "DEVIN_TRUST_WORKSPACE"):
+                env.pop(key, None)
         env.setdefault("NO_COLOR", "1")
         return env
 

@@ -121,17 +121,41 @@ def text_chunk(session_id: str, text: str) -> None:
 
 class Agent:
     def __init__(self) -> None:
-        self.session = "sess-1"
+        self.cloud = "--cloud" in sys.argv
+        self.session = "devin-" + "1" * 32 if self.cloud else "sess-1"
         self.cancelled = threading.Event()
         self.responses: dict[int, dict] = {}
         self.response_ready = threading.Condition()
         self.next_id = 1000
         self.config_values = {"model": "base-medium", "thought_level": "medium"}
+        self.config_values.update(
+            org_id="test-org", repos="", persona_slug="", devin_version="devin-auto", platform="linux"
+        )
         self.current_mode = "normal"
         if "--model" in sys.argv:
             self.config_values["model"] = sys.argv[sys.argv.index("--model") + 1]
 
     def config_options(self) -> list[dict]:
+        if self.cloud:
+            menus = {
+                "org_id": [("test-org", "Test organization")],
+                "repos": [("", "No repository"), ("test/app", "app")],
+                "persona_slug": [("", "Agent"), ("analyst", "Analyst")],
+                "devin_version": [("devin-auto", "Fusion"), ("devin_lite", "Lite")],
+                "platform": [("linux", "Ubuntu"), ("macos", "macOS"), ("windows", "Windows")],
+            }
+            return [
+                {
+                    "id": key,
+                    "name": key,
+                    "type": "select",
+                    "category": "other",
+                    "currentValue": self.config_values[key],
+                    "options": [{"value": value, "name": name} for value, name in choices],
+                    "_meta": {"signedUrl": "https://private.invalid/?token=private"},
+                }
+                for key, choices in menus.items()
+            ]
         fusion = self.config_values["model"].startswith("fusion-")
         thinking = ["low", "medium", "high"] if fusion else ["medium", "high"]
         return [
@@ -177,7 +201,9 @@ class Agent:
         sid = self.session
         prompt = "".join(b.get("text", "") for b in params.get("prompt", []))
         if SCENARIO == "config_changed":
-            self.config_values["model"] = "base-medium"
+            self.config_values["devin_version" if self.cloud else "model"] = (
+                "devin_lite" if self.cloud else "base-medium"
+            )
             update(sid, {"sessionUpdate": "config_option_update", "configOptions": self.config_options()})
             for _ in range(100):
                 if self.cancelled.wait(0.05):
@@ -403,7 +429,7 @@ class Agent:
                         "id": rid,
                         "result": {
                             "protocolVersion": 1,
-                            "agentCapabilities": {},
+                            "agentCapabilities": {"loadSession": True},
                             "authMethods": [],
                             "agentInfo": {"name": "fake-devin", "version": "0.0.1"},
                         },
@@ -439,7 +465,13 @@ class Agent:
                         ],
                     }
                 result = {"sessionId": self.session, "modes": modes}
-                if SCENARIO.startswith("config"):
+                if self.cloud:
+                    result.pop("modes")
+                    result["_meta"] = {
+                        "signedUrl": "https://private.invalid/?token=private",
+                        "credentials": "never-save",
+                    }
+                if SCENARIO.startswith("config") or self.cloud:
                     result["configOptions"] = self.config_options()
                 send({"jsonrpc": "2.0", "id": rid, "result": result})
             elif method == "session/load":
@@ -462,7 +494,9 @@ class Agent:
                         ],
                     }
                 }
-                if SCENARIO.startswith("config"):
+                if self.cloud:
+                    result.pop("modes")
+                if SCENARIO.startswith("config") or self.cloud:
                     result["configOptions"] = self.config_options()
                 send({"jsonrpc": "2.0", "id": rid, "result": result})
             elif method == "session/set_config_option":

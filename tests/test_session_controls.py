@@ -161,7 +161,7 @@ def test_grouped_choices_are_flattened_and_sensitive_metadata_is_omitted():
 
 
 @pytest.mark.parametrize(
-    "body", [{"cwd": 3}, {"values": []}, {"values": {"model": 3}}, {"model": FUSION}, {"target": "cloud"}]
+    "body", [{"cwd": 3}, {"values": []}, {"values": {"model": 3}}, {"model": FUSION}, {"target": "invented"}]
 )
 def test_discovery_body_rejects_untyped_overrides(harness, body):
     h = harness(scenario="config")
