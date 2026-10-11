@@ -10,12 +10,13 @@ Each run is one `Run` record (`models.py`). Its JSON snapshot carries `schema_ve
 | --- | --- |
 | Identity | `id` (`dv-` plus hex), `title`, `background`, `cwd`, `permission_mode`, `backend`, `model`, `session_id` (Hermes), `devin_session_id`, `pid` |
 | Timing | `created_at`, `started_at`, `finished_at`, `updated_at`, `duration_seconds`, `timeout_seconds` |
-| Work | `prompt`, `plan`, `tool_calls` (count), `permission_requests` (count), `usage`, `last_activity` |
+| Work | `prompt`, `plan`, `tool_calls` (count), `files_changed`, `permission_requests` (count), `usage`, `last_activity` |
+| Live views | `diffs` (the latest change to each file, as a unified diff of at most 160 lines, with `added`, `removed` and `new_file`; up to 30 files), `commands` (the last 10 shell commands, each with `command`, the tail of its `output`, `exit_code` and `status`) |
 | Decisions | `approval` (how the run was approved: via, rule key, choice, times), `permissions` (each in-run request with its decision and reason) |
 | Outcome | `state`, `stop_reason`, `exit_code`, `error` (`code` and `message`), `cancel_reason`, `kill_report` |
 | Logs | `events` (capped, oldest dropped and counted in `events_dropped`), `output`, `output_chars`, `output_truncated` |
 
-The summary used in lists and event envelopes is a subset: id, title, state, background, cwd, mode, backend, timestamps, duration, counts of tool calls and permission requests, last activity, usage and error.
+The summary used in lists and event envelopes is a subset: id, title, state, background, cwd, mode, backend, timestamps, duration, the tool call count, the changed files, the permission request count, last activity, usage and error.
 
 ## States
 
@@ -39,6 +40,8 @@ Each run keeps a list of progress events. Each has `seq`, `at`, `kind`, an optio
 | `thought` | A chunk of Devin's reasoning, when it shares one |
 | `tool_call` | A tool call Devin starts: title, `tool_kind`, file locations |
 | `tool_update` | A change to a running tool call, such as its status |
+| `diff` | A file edit as a unified diff: `path`, `patch`, `added`, `removed`, `new_file`, `truncated` |
+| `terminal` | A shell command and its output so far: `command`, `output` (the tail), `exit_code`, `status`. Updated in place while the command runs |
 | `plan` | Devin's plan, with entries and how many are done |
 | `mode` | The ACP session mode chosen or changed |
 | `permission` | An in-run permission request and its decision |

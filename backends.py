@@ -18,6 +18,7 @@ be added without touching anything else.
 
 from __future__ import annotations
 
+import difflib
 import logging
 import os
 import re
@@ -178,6 +179,22 @@ def _merge_paths(paths: list[str], update: dict) -> list[str]:
     return merged[:20]
 
 
+_DIFF_MAX_LINES = 160
+_COMMAND_OUTPUT_CHARS = 4000
+
+
+def unified_diff(path: str, old: str, new: str) -> dict[str, Any]:
+    """A compact unified diff of one edit, capped at ``_DIFF_MAX_LINES`` lines."""
+    name = os.path.basename(path) or path
+    lines = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{name}", f"b/{name}",
+                                      n=2, lineterm=""))[2:]
+    added = sum(1 for line in lines if line.startswith("+"))
+    removed = sum(1 for line in lines if line.startswith("-"))
+    truncated = len(lines) > _DIFF_MAX_LINES
+    return {"patch": "\n".join(lines[:_DIFF_MAX_LINES]), "added": added, "removed": removed,
+            "truncated": truncated}
+
+
 def _pick_option(options: list[dict], allow: bool) -> str | None:
     wanted = ("allow_once", "allow_always") if allow else ("reject_once", "reject_always")
     for kind in wanted:
@@ -234,10 +251,14 @@ class AcpBackend:
                 "status": str(update.get("status") or "pending"),
                 "locations": _merge_paths([], update),
             }
+            raw = update.get("rawInput") if isinstance(update.get("rawInput"), dict) else {}
+            if info["kind"] == "execute" and isinstance(raw.get("command"), str):
+                info["command"] = raw["command"][:2000]
             with run._lock:
                 run.tool_calls[call_id] = info
             io.emit("tool_call", info["title"], tool_call_id=call_id, tool_kind=info["kind"],
                     status=info["status"], locations=info["locations"] or None)
+            self._capture_content(io, call_id, info, update)
         elif kind == "tool_call_update":
             call_id = str(update.get("toolCallId") or "")
             with run._lock:
@@ -247,6 +268,7 @@ class AcpBackend:
                     if update.get(key):
                         info[key] = str(update[key])
                 info["locations"] = _merge_paths(info.get("locations") or [], update)
+            self._capture_content(io, call_id, info, update)
             if update.get("status") in ("completed", "failed"):
                 io.emit("tool_update", info.get("title", ""), tool_call_id=call_id, status=update.get("status"))
         elif kind == "plan":
@@ -277,6 +299,62 @@ class AcpBackend:
             title = update.get("title")
             if isinstance(title, str) and title:
                 io.emit("status", f"session title: {title}")
+
+    def _capture_content(self, io: RunIO, call_id: str, info: dict, update: dict) -> None:
+        """Turn a tool call's content into live views: file diffs and shell output.
+
+        Devin sends each edit as ``diff`` content (``oldText`` is absent for a new
+        file) and a running command's output as a growing text snapshot, with the
+        exit code in ``_meta.terminal_exit``.
+        """
+        run = io.run
+        content = [item for item in update.get("content") or [] if isinstance(item, dict)]
+        for item in content:
+            path, new = item.get("path"), item.get("newText")
+            if item.get("type") != "diff" or not isinstance(path, str) or not path or not isinstance(new, str):
+                continue
+            old = item.get("oldText") if isinstance(item.get("oldText"), str) else ""
+            record = {"path": path, "tool_call_id": call_id, "new_file": item.get("oldText") is None,
+                      **unified_diff(path, old, new)}
+            with run._lock:
+                previous = run.diffs.get(path)
+                if previous is not None and previous["patch"] == record["patch"]:
+                    continue
+                run.diffs.pop(path, None)
+                run.diffs[path] = record
+            verb = "Created" if record["new_file"] else "Edited"
+            io.emit("diff", f"{verb} {os.path.basename(path)} (+{record['added']} -{record['removed']})", **record)
+
+        if info.get("kind") != "execute":
+            return
+        texts = [_text_of(item.get("content")) for item in content
+                 if item.get("type") == "content" and isinstance(item.get("content"), dict)
+                 and item["content"].get("type") == "text"]
+        meta = update.get("_meta") if isinstance(update.get("_meta"), dict) else {}
+        exit_info = meta.get("terminal_exit") if isinstance(meta.get("terminal_exit"), dict) else {}
+        status = update.get("status") if isinstance(update.get("status"), str) else ""
+        if not texts and "exit_code" not in exit_info and not info.get("command"):
+            return
+        with run._lock:
+            command = run.commands.get(call_id)
+            created = command is None
+            if created:
+                command = {"tool_call_id": call_id, "command": info.get("command") or info.get("title") or "",
+                           "output": "", "exit_code": None, "status": "running"}
+                run.commands[call_id] = command
+                while len(run.commands) > 10:
+                    run.commands.pop(next(iter(run.commands)))
+            before = dict(command)
+            if texts:
+                command["output"] = texts[-1][-_COMMAND_OUTPUT_CHARS:]
+            if "exit_code" in exit_info:
+                command["exit_code"] = exit_info.get("exit_code")
+            if status in ("completed", "failed"):
+                command["status"] = status
+            changed = command != before
+            snapshot = dict(command)
+        if changed or created:
+            io.emit("terminal", snapshot["command"][:200], **snapshot)
 
     def _on_request(self, io: RunIO, method: str, params: dict) -> Any:
         if method == "session/request_permission":
