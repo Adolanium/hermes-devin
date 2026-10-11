@@ -138,6 +138,8 @@ class Agent:
         if SCENARIO == "refusal":
             send({"jsonrpc": "2.0", "id": rid, "result": {"stopReason": "refusal"}})
             return
+        if SCENARIO == "two_messages":
+            text_chunk(sid, "I'll look first.")
         update(sid, {"sessionUpdate": "plan", "entries": [
             {"content": "read code", "status": "completed", "priority": "high"},
             {"content": "fix bug", "status": "in_progress", "priority": "high"}]})

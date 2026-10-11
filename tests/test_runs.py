@@ -288,3 +288,9 @@ def test_desktop_sessions_get_a_live_card(harness, monkeypatch):
     assert result["card"] == f'::devin-run{{id="{result["run_id"]}"}}'
     background = h.call("delegate_to_devin", {"prompt": "z", "background": True})
     assert background["card"] == f'::devin-run{{id="{background["run_id"]}"}}'
+
+
+def test_messages_around_tool_calls_become_paragraphs(harness):
+    h = harness(scenario="two_messages")
+    result = h.call("delegate_to_devin", {"prompt": "x"})
+    assert result["output"].startswith("I'll look first.\n\nFixed the bug in app.py. "), result["output"]
