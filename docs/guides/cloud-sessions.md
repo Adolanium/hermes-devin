@@ -19,8 +19,8 @@ Missing pricing means unknown, not free.
 Cloud uses its own VM and repositories. The plugin does not upload the selected Local
 folder, local files, uncommitted changes or local MCP servers. It sends ACP a neutral `/`
 working directory, advertises no client filesystem or terminal capability and refuses
-requests to access those Local resources. A Cloud run's stored `cwd` is only its
-Hermes-side launch binding; it is not the Cloud workspace.
+requests to access those Local resources. A Cloud run records a neutral `/` as its
+`cwd`; it is not the Cloud workspace, and Local `allowed_roots` do not apply to Cloud.
 
 Confirm **Cloud-managed permissions** before **Ask Hermes**. This acknowledges remote
 permissions and possible charges; Hermes Local permission modes, sandbox and per-tool

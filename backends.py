@@ -36,7 +36,7 @@ from .session_controls import ControlsError, apply_options, model_options, optio
 logger = logging.getLogger(__name__)
 
 ACP_PROTOCOL_VERSION = 1
-CLIENT_INFO = {"name": "hermes-devin", "title": "Hermes Agent", "version": "0.1.0"}
+CLIENT_INFO = {"name": "hermes-devin", "title": "Hermes Agent", "version": "0.1.1"}
 
 _AUTH_PATTERNS = re.compile(
     r"not (?:logged|signed) in|unauthenticated|authentication required|auth(?:entication)? required|"
