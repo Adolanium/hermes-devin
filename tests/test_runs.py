@@ -329,6 +329,22 @@ def test_live_diffs_and_command_output(harness):
     assert all(c["tool_call_id"] != "r1" for c in snap["commands"])  # reads are not commands
 
 
+@pytest.mark.parametrize("scenario,count,dropped", [("repeated_edits", 4, 0), ("many_edits", 30, 5)])
+def test_diff_history_preserves_edits_and_replaces_duplicate_updates(harness, scenario, count, dropped):
+    h = harness({"max_events": 1}, scenario=scenario)
+    result = h.call("delegate_to_devin", {"prompt": "x"})
+    run = h.manager.get(result["run_id"])
+    assert run.settled.wait(20)
+    snap = h.manager.store.load(run.id)
+    assert len(snap["diffs"]) == count
+    assert snap["diffs_dropped"] == dropped
+    assert len({d["edit_id"] for d in snap["diffs"]}) == count
+    assert snap["diffs"][-1]["patch"] == "@@ -0,0 +1 @@\n+final-snapshot"
+    if not dropped:
+        assert any("+edit-0" in d["patch"] for d in snap["diffs"])
+        assert any("+second-hunk" in d["patch"] for d in snap["diffs"])
+
+
 def test_unified_diff_is_capped():
     backends = sub("backends")
     old = "\n".join(f"a{i}" for i in range(400))

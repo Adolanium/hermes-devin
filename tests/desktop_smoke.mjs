@@ -282,6 +282,33 @@ check('follow-ups are not listed as separate history rows', !page.includes('Foll
 render('review tab', React.createElement(pluginModule.__testing.ReviewPane, { runId: running.id, ctx }),
   ['Add type hints', 'utils.py', '+def add(a: int, b: int) -&gt; int:', 'Show in folder'])
 check('the card offers a review', render('card again', directive.render({ attrs: { id: running.id }, streaming: false })).includes('Review changes (1)'))
+const beforeDiffHistory = details[running.id]
+const earlierEdit = { path: 'C:\\work\\app\\src\\utils.py', tool_call_id: 'earlier', patch: '@@ -1 +1,2 @@\n+EARLIER_STYLE_EDIT', added: 16, removed: 0 }
+const laterEdit = { ...earlierEdit, tool_call_id: 'later', patch: '@@ -8 +8,2 @@\n+LATER_LINK_EDIT', added: 1 }
+details[running.id] = { ...beforeDiffHistory, diffs: [laterEdit], events: [
+  { seq: 6, kind: 'diff', data: earlierEdit }, { seq: 7, kind: 'diff', data: laterEdit }
+] }
+render('legacy multi-edit card', directive.render({ attrs: { id: running.id }, streaming: false }),
+  ['EARLIER_STYLE_EDIT', 'LATER_LINK_EDIT', '+17', 'Review changes (1)'])
+render('legacy multi-edit review', React.createElement(pluginModule.__testing.ReviewPane, { runId: running.id, ctx }),
+  ['EARLIER_STYLE_EDIT', 'LATER_LINK_EDIT', '+17', '1 file'])
+details[running.id] = beforeDiffHistory
+const views = pluginModule.__testing.liveViews({
+  diffs: [{ ...earlierEdit, edit_id: 'earlier:0' }, { ...laterEdit, edit_id: 'later:0' }],
+  events: [{ seq: 20, kind: 'status' }]
+}, [
+  { seq: 18, kind: 'diff', data: { ...laterEdit, edit_id: 'later:0', patch: 'STALE_SNAPSHOT', added: 99 } },
+  { seq: 21, kind: 'diff', data: { ...laterEdit, edit_id: 'later:0', patch: 'LATEST_SNAPSHOT', added: 2 } },
+  { seq: 22, kind: 'diff', data: { ...laterEdit, edit_id: 'later:1', patch: 'SECOND_ITEM', added: 3 } }
+])
+check('live updates replace their own edit without dropping other edits or counting stale data',
+  views.diffs.length === 1 && views.diffs[0].edits.length === 3 && views.diffs[0].added === 21
+  && views.diffs[0].edits[1].patch === 'LATEST_SNAPSHOT')
+const cappedViews = pluginModule.__testing.liveViews({ diffs: Array.from({ length: 35 }, (_, i) => ({
+  ...laterEdit, edit_id: `edit-${i}`, added: 1
+})) }, [])
+check('edit history is capped and marks omitted earlier edits',
+  cappedViews.diffsTruncated && cappedViews.diffs[0].edits.length === 30 && cappedViews.diffs[0].added === 30)
 check('the page offers a new task', render('page again', byArea('routes')[0].render()).includes('New Devin task'))
 check('askHermes opens a chat and sends', await pluginModule.__testing.askHermes('Have Devin fix it.') === true
   && state.notices.some(n => n.newChat) && state.notices.some(n => n.submit && n.submit[1] === 'Have Devin fix it.'))

@@ -60,7 +60,10 @@ In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands 
 - a **Stop** button that cleans up Local processes, or requests Cloud cancellation and reports whether it was confirmed
 - a **Tell Devin…** box under a finished run: your follow-up continues the same Devin session, so Devin remembers the work, and it appears as the next card in the thread
 
-**Review changes** opens a tab with every file Devin changed in the run, each with its full diff.
+**Review changes** opens a tab with recorded edits grouped by file, including earlier edits
+to the same file. Repeated progress updates replace their own edit snapshot instead of
+adding duplicates. The view keeps up to 30 recent edits and marks omitted or truncated
+history; its line totals count edit operations, not a net Git diff.
 
 A **Devin** page in the sidebar lists active runs and history, and has a **New Devin task** box that opens a chat with your request. A status-bar chip shows while Devin is working and turns into **Devin needs you** when a run is waiting for your answer. Your pet says what Devin is editing or running, and you get a notification when a run finishes or needs you, even if you've switched to another app.
 
