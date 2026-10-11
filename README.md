@@ -44,6 +44,20 @@ Devin   › edits src/utils.py · asks to run pytest → you approve · 41 passe
 Hermes  › Devin finished: 1 file changed, tests pass. Here is the summary ...
 ```
 
+## Watch it work in Hermes Desktop
+
+In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands off a task, its reply carries a live card for the run:
+
+- Devin's plan, ticking off step by step
+- each file lighting up as Devin edits it (click one to show it in its folder)
+- recent tool calls and every permission decision
+- elapsed time, token use, the final answer or the error
+- a **Stop** button that ends the run and everything it started
+
+A **Devin** page in the sidebar lists active runs and history, a status-bar chip shows while Devin is working, and you get a notification when a run finishes, even if you've switched to another app.
+
+The Desktop half ships in the same folder as the plugin and starts switched off. Turn it on under **Capabilities → Plugins → Devin**.
+
 ## You stay in charge
 
 - **Every run needs your yes.** Each run passes through Hermes' approval prompt. If nobody is there to answer, the run does not start.
@@ -153,7 +167,7 @@ Or drive runs yourself:
 
 Hermes Devin talks to `devin acp`, the same Agent Client Protocol Devin uses for editor integrations. That gives typed progress events, a real cancel, and permission requests the plugin can answer itself. A plain `devin -p` backend is there as a fallback. [How it works](docs/how-it-works.md) explains the choice.
 
-There is no fork, upstream patch, extra service or Python dependency. Run history is kept as small JSON files in Hermes' plugin data folder, and live events are published for a future Desktop panel. See [Run data and events](docs/run-data-and-events.md).
+There is no fork, upstream patch, extra service or Python dependency. Run history is kept as small JSON files in Hermes' plugin data folder, and every change is published as a live event. See [Run data and events](docs/run-data-and-events.md).
 
 Want Devin's hosted tools in Hermes too? The [Devin MCP server](docs/devin-mcp.md) works alongside this plugin.
 

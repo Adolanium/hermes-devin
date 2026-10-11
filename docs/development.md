@@ -20,7 +20,8 @@ The plugin is plain Python 3.11+ with no dependencies beyond Hermes itself.
 | `store.py` | Snapshot persistence, pruning, orphans |
 | `schemas.py` | Tool schemas |
 | `slash.py` | `/devin` command |
-| `dashboard/plugin_api.py` | Read-only API for a future panel |
+| `dashboard/plugin_api.py` | Runs API for the Desktop half; `manifest.json` mounts it |
+| `desktop/plugin.js` | Desktop half: live run card, Devin page, status-bar chip |
 
 ## Running the tests
 

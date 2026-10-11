@@ -11,5 +11,6 @@
 - **The first instant on Windows.** A process Devin spawned before it joined its Job Object would escape the job. See [Process trees](process-tree.md#limits).
 - **POSIX and a killed Hermes.** If Hermes is killed outright on macOS or Linux, a background run's process group is not signalled. The run is marked failed the next time the plugin starts.
 - **Login output.** `devin auth status` output is read for clear yes/no answers. Anything the plugin does not recognise never blocks a run; Devin then reports a missing login itself.
-- **No Desktop panel yet.** The data model, events and read-only API are ready. The panel UI is not part of this release.
+- **Older Desktop builds skip linked plugins.** Some Hermes Desktop builds (one from 3 October 2026, for example) do not follow a symlink or junction in `plugins/`, so a checkout linked there gets no Desktop half. Newer builds follow the link. Update Hermes Desktop, or install from Git instead.
+- **The live card needs the model's cooperation.** In Desktop sessions `delegate_to_devin` returns a `card` line, and the tool description asks the model to put it in its reply. A model that leaves it out still gets the result; the Devin page and the status-bar chip show the run either way.
 - **Tested against a fake CLI.** The tests use a stand-in for the Devin CLI, built from Devin's documented flags and the ACP specification, plus the session modes and edit reports seen from Devin CLI 3000.11.3. Other Devin versions may differ.
