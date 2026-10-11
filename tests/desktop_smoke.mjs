@@ -273,6 +273,7 @@ const cloudCard = render('Cloud card', directive.render({ attrs: { id: cloudRun.
 check('unknown Cloud activity does not offer follow-ups or local file actions', !cloudCard.includes('Send to Devin') && !cloudCard.includes('Show in folder'))
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
 const page = render('page', byArea('routes')[0].render(), ['Devin <span', 'Hermes', 'nous-girl-dark.png', 'mask-image', '1 working', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+check('header describes Local and Cloud execution accurately', page.includes('Devin runs it locally or in the cloud.') && !page.includes('on this machine'))
 check('the mark does not need an installed app', !restCalls.some(([p]) => p === '/brand/devin'))
 check('the mark is not the generic robot fallback', !page.includes('data-icon="hubot"'))
 const mark = page.match(/data:image\/svg\+xml;charset=utf-8,([^&]+)/)

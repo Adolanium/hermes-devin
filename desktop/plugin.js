@@ -382,7 +382,7 @@ function BrandHeader({ live, active }) {
           }),
           jsx('span', {
             style: { fontSize: 13, color: 'var(--ui-text-tertiary)' },
-            children: 'Hermes plans the task and asks you first. Devin writes the code on this machine.'
+            children: 'Hermes plans the task and asks you first. Devin runs it locally or in the cloud.'
           })
         ]
       }),
