@@ -12,6 +12,7 @@ container for its whole tree:
   ``taskkill /PID <pid> /T /F``.
 * **POSIX**: the child starts in a new session (its own process group), and
   shutdown is ``SIGTERM`` to the group, a grace period, then ``SIGKILL``.
+  Tracked descendants are killed even if they leave that group or session.
 
 A graceful stop is attempted first (the caller passes a ``soft_stop`` such as
 an ACP ``session/cancel``; on POSIX the group also gets ``SIGTERM``), then the
@@ -30,9 +31,12 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +206,80 @@ class KillReport:
                 "steps": list(self.steps)}
 
 
+class _PosixDescendants:
+    """Remember process identities before their parents exit and they are reparented."""
+
+    def __init__(self, pid: int):
+        self.pid = pid
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._processes: dict[int, psutil.Process] = {}
+        try:
+            self._processes[pid] = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            return
+        self._thread = threading.Thread(target=self._watch, name=f"devin-tree-{pid}", daemon=True)
+        self._thread.start()
+
+    def refresh(self) -> list[psutil.Process]:
+        with self._lock:
+            self._processes = {pid: proc for pid, proc in self._processes.items() if proc.is_running()}
+            for proc in list(self._processes.values()):
+                try:
+                    if proc.ppid() not in self._processes:
+                        for child in proc.children(recursive=True):
+                            self._processes[child.pid] = child
+                except psutil.NoSuchProcess:
+                    continue
+                except psutil.Error:
+                    logger.warning("could not inspect descendants of pid %s", proc.pid, exc_info=True)
+            return [proc for pid, proc in self._processes.items() if pid != self.pid]
+
+    def _watch(self) -> None:
+        while not self._stop.wait(0.1):
+            self.refresh()
+
+    def close(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def group_alive(self, pgid: int) -> bool:
+        with self._lock:
+            for proc in self._processes.values():
+                try:
+                    if proc.is_running() and os.getpgid(proc.pid) == pgid:
+                        return True
+                except (OSError, psutil.Error):
+                    continue
+            return False
+
+    def kill(self, report: KillReport) -> None:
+        self.close()
+        descendants = self.refresh()
+        for proc in reversed(descendants):
+            try:
+                proc.kill()
+                report.steps.append(f"sigkill_descendant:{proc.pid}")
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.Error as exc:
+                report.steps.append(f"sigkill_descendant_failed:{proc.pid}:{exc}")
+                logger.warning("could not kill descendant pid %s: %s", proc.pid, exc)
+        _, alive = psutil.wait_procs(descendants, timeout=2)
+        for proc in alive:
+            try:
+                if proc.status() == psutil.STATUS_ZOMBIE:
+                    continue
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.Error:
+                pass
+            report.steps.append(f"descendant_survived:{proc.pid}")
+            logger.warning("descendant pid %s survived cleanup", proc.pid)
+
+
 class ProcessTree:
     """A spawned CLI process plus whatever is needed to kill its descendants."""
 
@@ -210,6 +288,7 @@ class ProcessTree:
         self.argv = list(argv)
         self.job: Any = None
         self.job_error: str = ""
+        self._descendants: _PosixDescendants | None = None
         kwargs: dict[str, Any] = dict(
             cwd=cwd, env=env, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             bufsize=-1,
@@ -230,6 +309,8 @@ class ProcessTree:
                 self.job_error = str(exc)
                 logger.warning("devin: Job Object unavailable for pid %s (%s); using taskkill fallback",
                                self.pid, exc)
+        else:
+            self._descendants = _PosixDescendants(self.pid)
 
     # -- queries ----------------------------------------------------------
 
@@ -245,6 +326,9 @@ class ProcessTree:
     # -- shutdown ---------------------------------------------------------
 
     def _signal_group(self, sig: int) -> bool:
+        if self.poll() is not None and psutil.pid_exists(self.pid):
+            if self._descendants is None or not self._descendants.group_alive(self.pid):
+                return False
         try:
             os.killpg(self.pid, sig)
             return True
@@ -252,8 +336,10 @@ class ProcessTree:
             return False
 
     def stop(self, *, grace: float, soft_stop: Callable[[], None] | None = None) -> KillReport:
-        """Stop the whole tree. Always ends with nothing of the tree left running."""
+        """Stop the CLI group and tracked descendants, recording cleanup failures."""
         report = KillReport()
+        if self._descendants is not None:
+            self._descendants.refresh()
         if soft_stop is not None and self.poll() is None:
             try:
                 soft_stop()
@@ -297,8 +383,12 @@ class ProcessTree:
                 except Exception:
                     pass
             return "taskkill"
+        if self._descendants is not None:
+            self._descendants.refresh()
         if self._signal_group(signal.SIGKILL):
             report.steps.append("sigkill_group")
+        if self._descendants is not None:
+            self._descendants.kill(report)
         if self.poll() is None:
             try:
                 self.proc.kill()
@@ -309,6 +399,8 @@ class ProcessTree:
 
     def close(self) -> None:
         """Release the job handle. Pipes are left to the readers, which see EOF once the tree is gone."""
+        if self._descendants is not None:
+            self._descendants.close()
         job, self.job = self.job, None
         if job is not None:
             try:
@@ -333,5 +425,9 @@ class ProcessTree:
                 except Exception:
                     pass
         else:
+            if self._descendants is not None:
+                self._descendants.refresh()
             self._signal_group(signal.SIGKILL)
+            if self._descendants is not None:
+                self._descendants.kill(KillReport())
         self.close()

@@ -69,7 +69,7 @@ The Desktop half ships in the same folder as the plugin and starts switched off.
 - **Permission mode is your setting, not the model's.** `plan`, `normal`, `accept-edits`, `smart`, `dangerous` or `autonomous` come only from the plugin settings. `dangerous` also needs an explicit `allow_dangerous: true`. Hermes cannot pass a mode, a model or a sandbox flag per call.
 - **Devin's own questions reach you.** In a foreground run, Devin's "may I run this command?" prompts become Hermes approval prompts. Background runs started from Hermes Desktop, including the first task opened from **New Devin task**, ask on their run card with Allow and Deny buttons, and deny the request if nobody answers in time. Other background runs deny them, because nobody is waiting to answer.
 - **Fenced folders.** `allowed_roots` keeps Devin inside the directories you list.
-- **Nothing left behind.** On Windows the run lives in a Job Object, so even a crashed Hermes takes Devin's helpers with it. On macOS and Linux it gets its own process group.
+- **Stop includes helpers.** On Windows the run lives in a Job Object, so even a crashed Hermes takes Devin's helpers with it. On macOS and Linux it gets its own process group, and tracked descendants are stopped even if they create another group or session. See [process-tree limits](docs/process-tree.md#limits).
 - **Output is data.** Devin's reply is quoted and labelled as another agent's output when it comes back into the chat.
 
 The full model is in [Approval and permissions](docs/approval-and-permissions.md).

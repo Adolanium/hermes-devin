@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
+import signal
 import subprocess
+import sys
 import time
 
 import pytest
@@ -78,6 +82,99 @@ def test_interrupt_answer_reports_what_happened(harness):
     result = h.call("delegate_to_devin", {"prompt": "x"})
     assert result["ok"] is False
     assert result["kill_report"]["steps"]
+
+
+@pytest.mark.skipif(process.IS_WINDOWS, reason="POSIX process groups")
+@pytest.mark.parametrize("detached_session", [False, True])
+@pytest.mark.parametrize("ending", ["graceful", "hard", "normal"])
+def test_cleanup_kills_descendants_outside_cli_group(tmp_path, detached_session, ending):
+    pidfile = tmp_path / "descendants.json"
+    finish = tmp_path / "finish"
+    child_code = f"""
+import json, os, signal, subprocess, sys, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
+Path({str(pidfile)!r}).write_text(json.dumps([os.getpid(), child.pid]))
+time.sleep(300)
+"""
+    root_code = f"""
+import subprocess, sys, time
+from pathlib import Path
+subprocess.Popen([sys.executable, "-c", {child_code!r}],
+                 **{{"start_new_session": True}} if {detached_session!r} else {{"process_group": 0}})
+while not Path({str(finish)!r}).exists():
+    time.sleep(0.01)
+"""
+    tree = process.ProcessTree([sys.executable, "-c", root_code], cwd=str(tmp_path), env=dict(os.environ))
+    unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"], start_new_session=True)
+    pids = []
+    try:
+        deadline = time.monotonic() + 10
+        while not pidfile.exists() or not pidfile.read_text():
+            assert time.monotonic() < deadline, "descendants did not start"
+            time.sleep(0.02)
+        pids = json.loads(pidfile.read_text())
+        assert all(process.pid_alive(pid) for pid in pids)
+        assert os.getpgid(pids[0]) != tree.pid
+        if ending == "normal":
+            time.sleep(0.5)
+            finish.touch()
+            assert tree.wait(5) == 0
+            tree.reap_descendants()
+        elif ending == "graceful":
+            report = tree.stop(grace=1.0, soft_stop=finish.touch)
+            assert report.graceful is True
+        else:
+            tree.stop(grace=0.0)
+        assert all(_wait_dead(pid, timeout=3) for pid in pids), "detached descendant survived cleanup"
+        assert unrelated.poll() is None, "cleanup killed an unrelated process"
+    finally:
+        unrelated.kill()
+        unrelated.wait(5)
+        for pid in reversed(pids):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        tree.stop(grace=0.0)
+        tree.close_streams()
+
+
+@pytest.mark.skipif(process.IS_WINDOWS, reason="POSIX process identity checks")
+def test_posix_cleanup_does_not_signal_reused_pids(monkeypatch):
+    class Identity:
+        def __init__(self, pid, ppid):
+            self.pid, self.parent = pid, ppid
+            self.alive = True
+
+        def is_running(self):
+            return self.alive
+
+        def ppid(self):
+            return self.parent
+
+        def children(self, recursive=False):
+            return [child]
+
+        def kill(self):
+            pytest.fail("a reused PID was signalled")
+
+    root = Identity(4242, 1)
+    child = Identity(4243, root.pid)
+    monkeypatch.setattr(process.psutil, "Process", lambda pid: root)
+    monkeypatch.setattr(process.psutil, "pid_exists", lambda pid: True)
+    monkeypatch.setattr(process.os, "killpg", lambda *args: pytest.fail("a reused process group was signalled"))
+    proc = _FakeProc(root.pid)
+    tree = process.ProcessTree(["devin"], cwd=".", env={}, popen=lambda *args, **kwargs: proc)
+    try:
+        assert child in tree._descendants.refresh()
+        root.alive = child.alive = False
+        proc.returncode = 0
+        report = tree.stop(grace=0.0)
+        assert report.steps == []
+    finally:
+        tree.close()
 
 
 # --- Windows kill path, mocked so it runs everywhere ------------------------------------------
@@ -212,5 +309,6 @@ def test_posix_child_gets_its_own_session(monkeypatch):
         seen.update(kwargs)
         return _FakeProc()
 
-    process.ProcessTree(["devin"], cwd=".", env={}, popen=popen)
+    tree = process.ProcessTree(["devin"], cwd=".", env={}, popen=popen)
     assert seen["start_new_session"] is True
+    tree.close()

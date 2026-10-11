@@ -10,6 +10,7 @@
 - **Matching approvals.** Hermes does not pass a tool-call id to tool handlers, so the approval ticket is matched on session and arguments. Two identical calls in the same session share one ticket slot.
 - **The first instant on Windows.** A process Devin spawned before it joined its Job Object would escape the job. See [Process trees](process-tree.md#limits).
 - **POSIX and a killed Hermes.** If Hermes is killed outright on macOS or Linux, a background run's process group is not signalled. The run is marked failed the next time the plugin starts.
+- **POSIX ancestry tracking is best-effort.** A parent that spawns and exits between observations can orphan a helper before it is recorded. Separate process groups and sessions are cleaned up once tracked; this is not OS-level containment. See [Process trees](process-tree.md#limits).
 - **Login output.** `devin auth status` output is read for clear yes/no answers. Anything the plugin does not recognise never blocks a run; Devin then reports a missing login itself.
 - **Older Desktop builds skip linked plugins.** Some Hermes Desktop builds (one from 3 October 2026, for example) do not follow a symlink or junction in `plugins/`, so a checkout linked there gets no Desktop half. Newer builds follow the link. Update Hermes Desktop, or install from Git instead.
 - **Follow-ups start after a run finishes.** A follow-up continues Devin's session from the run card once the run is done; you cannot steer a run while it works. Follow-ups need the ACP backend, and Devin must still have the session.
