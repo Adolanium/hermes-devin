@@ -103,7 +103,10 @@ export function useQuery({ queryKey, enabled }) {
 export const queryClient = { invalidateQueries: () => Promise.resolve() }
 export const host = {
   notify: n => notices.push(n), navigate: () => {}, onEvent: () => () => {},
-  state: {}, request: () => Promise.resolve({})
+  state: {}, request: () => Promise.resolve({}),
+  newChat: () => notices.push({ newChat: true }),
+  composer: { submit: (address, text) => (notices.push({ submit: [address, text] }), true), setDraft: async () => true },
+  openWorkspace: (id, options) => (notices.push({ workspace: id, title: options.title }), () => {})
 }
 export const Button = ({ children, onClick, disabled }) => h('button', { onClick, disabled }, children)
 export const Codicon = ({ name }) => h('i', { 'data-icon': name })
@@ -140,7 +143,8 @@ globalThis.document = {
   head: { appendChild() {} }
 }
 
-const plugin = (await import(pathToFileURL(pluginFile).href)).default
+const pluginModule = await import(pathToFileURL(pluginFile).href)
+const plugin = pluginModule.default
 check('default export has id devin', plugin && plugin.id === 'devin')
 
 const state = globalThis.__devinSmoke
@@ -208,6 +212,17 @@ render('failed card', directive.render({ attrs: { id: failed.id }, streaming: fa
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
 const page = render('page', byArea('routes')[0].render(), ['Devin', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
 check('follow-ups are not listed as separate history rows', !page.includes('Follow-up: also add tests'))
+render('review tab', React.createElement(pluginModule.__testing.ReviewPane, { runId: running.id, ctx }),
+  ['Add type hints', 'utils.py', '+def add(a: int, b: int) -&gt; int:', 'Show in folder'])
+check('the card offers a review', render('card again', directive.render({ attrs: { id: running.id }, streaming: false })).includes('Review changes (1)'))
+check('the page offers a new task', render('page again', byArea('routes')[0].render()).includes('New Devin task'))
+check('askHermes opens a chat and sends', await pluginModule.__testing.askHermes('Have Devin fix it.') === true
+  && state.notices.some(n => n.newChat) && state.notices.some(n => n.submit && n.submit[1] === 'Have Devin fix it.'))
+for (const fn of state.listeners['plugin.devin.run.progress'] || []) {
+  fn({ type: 'plugin.devin.run.progress', payload: { type: 'run.progress', run_id: running.id, run: running, event: { seq: 9, kind: 'diff', text: 'Edited models.py', data: { path: 'C:\\work\\app\\models.py', new_file: false } } } })
+  fn({ type: 'plugin.devin.run.progress', payload: { type: 'run.progress', run_id: running.id, run: running, event: { seq: 10, kind: 'diff', text: 'Edited a.py', data: { path: 'a.py' } } } })
+}
+check('the pet narrates edits, throttled', state.notices.filter(n => n.pet && n.pet.startsWith('Devin is ')).length === 1, JSON.stringify(state.notices))
 render('status chip', byArea('statusBar.right')[0].render(), ['Devin needs you'])
 check('a waiting request alerts once', state.notices.filter(n => n.pet && n.pet.startsWith('Devin asks to')).length === 1, JSON.stringify(state.notices))
 

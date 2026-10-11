@@ -511,12 +511,12 @@ const box = {
   maxHeight: 260
 }
 
-function DiffView({ diff }) {
+function DiffView({ diff, full = false }) {
   const lines = String(diff.patch || '').split('\n')
 
   return jsxs('div', {
     className: 'devin-in',
-    style: { ...box, padding: '6px 0' },
+    style: { ...box, padding: '6px 0', ...(full ? { maxHeight: 'none' } : {}) },
     children: [
       ...lines.map((line, i) => {
         const tone = line.startsWith('@@')
@@ -1002,6 +1002,14 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
                     onClick: () => host.navigate(PAGE),
                     children: 'All runs'
                   }),
+              !compact && views.diffs.length
+                ? jsx(Button, {
+                    size: 'xs',
+                    variant: 'outline',
+                    onClick: () => openReview(runId, run.title, ctx),
+                    children: `Review changes (${views.diffs.length})`
+                  })
+                : null,
               live
                 ? jsx(Button, {
                     size: 'xs',
@@ -1017,6 +1025,222 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
       }),
       compact ? null : jsx(FollowUps, { children: followUps, ctx }),
       !compact && resumable && followUps.length === 0 ? jsx(FollowUpBox, { runId, active: live }) : null
+    ]
+  })
+}
+
+// --- review tab and new tasks ----------------------------------------------------
+
+function ReviewPane({ runId, ctx }) {
+  const summaries = useValue($runs)
+  const liveAll = useValue($live)
+  const summary = summaries[runId] || {}
+  const detail = useRunDetail(runId, isActive(summary))
+  const data = detail.data || {}
+  const run = { ...data, ...summary }
+  const { diffs } = liveViews(data, liveAll[runId] || [])
+  const added = diffs.reduce((n, d) => n + (d.added || 0), 0)
+  const removed = diffs.reduce((n, d) => n + (d.removed || 0), 0)
+
+  return jsx('div', {
+    style: { height: '100%', overflow: 'auto' },
+    children: jsxs('div', {
+      style: { maxWidth: 1100, margin: '0 auto', padding: '22px 24px 48px', display: 'flex', flexDirection: 'column', gap: 18 },
+      children: [
+        jsxs('header', {
+          style: { display: 'flex', flexDirection: 'column', gap: 6 },
+          children: [
+            jsxs('div', {
+              style: { ...S.row, gap: 10 },
+              children: [
+                jsx(Codicon, { name: 'diff', style: { fontSize: 18, color: 'var(--ui-accent)' } }),
+                jsx('h1', { style: { fontSize: 18, fontWeight: 650, margin: 0 }, children: run.title || 'Devin run' }),
+                jsx(StateBadge, { state: run.state })
+              ]
+            }),
+            jsxs('div', {
+              style: { ...S.row, ...S.muted, gap: 10, fontSize: 12.5 },
+              children: [
+                jsx('span', { style: S.mono, children: runId }),
+                jsx('span', { children: run.cwd }),
+                jsx('span', { children: `${diffs.length} file${diffs.length === 1 ? '' : 's'}` }),
+                jsx('span', { style: { ...S.mono, color: 'var(--ui-green)' }, children: `+${added}` }),
+                jsx('span', { style: { ...S.mono, color: 'var(--ui-red)' }, children: `−${removed}` })
+              ]
+            })
+          ]
+        }),
+        diffs.length
+          ? jsx('div', {
+              style: { display: 'flex', flexDirection: 'column', gap: 16 },
+              children: diffs
+                .slice()
+                .reverse()
+                .map(d =>
+                  jsxs(
+                    'section',
+                    {
+                      style: { display: 'flex', flexDirection: 'column', gap: 6 },
+                      children: [
+                        jsxs('div', {
+                          style: { ...S.row, justifyContent: 'space-between' },
+                          children: [
+                            jsxs('span', {
+                              style: { ...S.row, minWidth: 0 },
+                              children: [
+                                jsx(Codicon, {
+                                  name: d.new_file ? 'diff-added' : 'diff-modified',
+                                  style: { color: d.new_file ? 'var(--ui-green)' : 'var(--ui-yellow)' }
+                                }),
+                                jsx('span', {
+                                  style: { ...S.mono, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                                  children: shortPath(d.path, run.cwd)
+                                }),
+                                d.new_file ? jsx('span', { style: S.pill('var(--ui-green)'), children: 'new' }) : null,
+                                jsx('span', { style: { ...S.mono, fontSize: 11.5, color: 'var(--ui-green)' }, children: `+${d.added || 0}` }),
+                                jsx('span', { style: { ...S.mono, fontSize: 11.5, color: 'var(--ui-red)' }, children: `−${d.removed || 0}` })
+                              ]
+                            }),
+                            ctx && ctx.os
+                              ? jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.revealPath(d.path), children: 'Show in folder' })
+                              : null
+                          ]
+                        }),
+                        jsx(DiffView, { diff: d, full: true })
+                      ]
+                    },
+                    d.path
+                  )
+                )
+            })
+          : jsx('div', { style: S.faint, children: detail.isLoading ? 'Loading changes…' : 'Devin has not changed any files in this run.' })
+      ]
+    })
+  })
+}
+
+function openReview(runId, title, ctx) {
+  if (typeof host.openWorkspace !== 'function') {
+    host.navigate(PAGE)
+
+    return
+  }
+
+  host.openWorkspace(`devin-review-${runId}`, {
+    title: `Changes · ${String(title || runId).slice(0, 40)}`,
+    render: () => jsx(ReviewPane, { runId, ctx })
+  })
+}
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+/** Open a fresh chat and send a request, retrying while the new composer mounts. */
+async function askHermes(text) {
+  if (!host.composer || typeof host.newChat !== 'function') {
+    return false
+  }
+
+  host.newChat()
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(150)
+
+    if (host.composer.submit('new', text) || host.composer.submit(null, text)) {
+      return true
+    }
+  }
+
+  return host.composer.setDraft ? host.composer.setDraft(null, text) : false
+}
+
+function NewTask() {
+  const [task, setTask] = useState('')
+  const [folder, setFolder] = useState('')
+  const [background, setBackground] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const start = async () => {
+    const what = task.trim()
+
+    if (!what || busy) {
+      return
+    }
+
+    const where = folder.trim()
+    const text = `Have Devin ${what.replace(/^have devin\s+/i, '')}${where ? ` in ${where}` : ''}.${background ? ' Run it in the background and tell me when it is done.' : ''}`
+    setBusy(true)
+    const sent = await askHermes(text)
+    setBusy(false)
+
+    if (sent) {
+      setTask('')
+    } else {
+      host.notify({ kind: 'error', message: 'Could not open a chat for the request. Start a chat and ask Hermes there.' })
+    }
+  }
+
+  return jsxs('div', {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      padding: '14px 16px',
+      borderRadius: 10,
+      border: '1px solid color-mix(in srgb, var(--ui-accent) 35%, transparent)',
+      background: 'color-mix(in srgb, var(--ui-accent) 5%, transparent)'
+    },
+    children: [
+      jsxs('div', {
+        style: { ...S.row, gap: 8 },
+        children: [jsx(Codicon, { name: 'sparkle', style: { color: 'var(--ui-accent)' } }), jsx('span', { style: { fontWeight: 600 }, children: 'New Devin task' })]
+      }),
+      jsx(Textarea, {
+        value: task,
+        rows: 2,
+        placeholder: 'What should Devin do? For example: add type hints to src/utils.py and run the tests',
+        onChange: event => setTask(event.target.value),
+        onKeyDown: event => {
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault()
+            void start()
+          }
+        },
+        style: { fontSize: 13, resize: 'vertical', minHeight: 54 }
+      }),
+      jsxs('div', {
+        style: { ...S.row, flexWrap: 'wrap', gap: 10 },
+        children: [
+          jsx('input', {
+            value: folder,
+            onChange: event => setFolder(event.target.value),
+            placeholder: 'Folder (optional), e.g. E:\\Dev\\myapp',
+            style: {
+              flex: '1 1 260px',
+              minWidth: 0,
+              height: 28,
+              padding: '0 9px',
+              borderRadius: 7,
+              border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 55%, transparent)',
+              background: 'transparent',
+              color: 'var(--ui-text-primary)',
+              font: 'inherit',
+              fontSize: 12.5
+            }
+          }),
+          jsxs('label', {
+            style: { ...S.row, gap: 6, ...S.muted, fontSize: 12.5, cursor: 'pointer' },
+            children: [
+              jsx('input', { type: 'checkbox', checked: background, onChange: event => setBackground(event.target.checked) }),
+              'In the background'
+            ]
+          }),
+          jsx(Button, { size: 'sm', variant: 'default', disabled: busy || !task.trim(), onClick: start, children: busy ? 'Opening chat…' : 'Ask Hermes' })
+        ]
+      }),
+      jsx('span', {
+        style: { ...S.faint, fontSize: 11.5 },
+        children: 'Opens a new chat with this request. Hermes writes the brief for Devin, and the run waits for your approval as usual.'
+      })
     ]
   })
 }
@@ -1176,6 +1400,7 @@ function DevinPage({ ctx }) {
               : null
           ]
         }),
+        jsx(NewTask, {}),
         backend === 'off'
           ? jsx('div', {
               style: { ...S.card, ...S.muted },
@@ -1272,6 +1497,9 @@ function DevinChip() {
   })
 }
 
+// For tests/desktop_smoke.mjs; Hermes Desktop only reads the default export.
+export const __testing = { ReviewPane, askHermes }
+
 // --- plugin ----------------------------------------------------------------------
 
 export default {
@@ -1288,6 +1516,36 @@ export default {
     ctx.onDispose(() => style.remove())
 
     const announced = new Set()
+    const lastLine = new Map()
+
+    // Short progress lines on the pet while Devin edits files or runs commands, at most one
+    // every 12 seconds per run.
+    const narrate = payload => {
+      const event = payload.event
+
+      if (!event || (event.kind !== 'diff' && event.kind !== 'terminal')) {
+        return
+      }
+
+      const now = Date.now()
+
+      if (now - (lastLine.get(payload.run_id) || 0) < 12000) {
+        return
+      }
+
+      const data = event.data || {}
+      const line =
+        event.kind === 'diff'
+          ? `Devin is ${data.new_file ? 'creating' : 'editing'} ${baseName(data.path)}`
+          : data.status === 'running' && data.command
+            ? `Devin is running ${String(data.command).slice(0, 80)}`
+            : ''
+
+      if (line) {
+        lastLine.set(payload.run_id, now)
+        ctx.pet?.say(line, { id: `devin-progress-${payload.run_id}`, tone: 'info', ttlMs: 5000 })
+      }
+    }
 
     const onRunEvent = frame => {
       const payload = frame && frame.payload
@@ -1298,6 +1556,7 @@ export default {
 
       mergeRuns([payload.run])
       pushLive(payload.run_id, payload.event)
+      narrate(payload)
 
       if (payload.type === 'run.finished' || payload.type === 'run.state') {
         void queryClient.invalidateQueries({ queryKey: [ID, 'run', payload.run_id] })
