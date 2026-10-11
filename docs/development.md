@@ -63,6 +63,8 @@ The Devin trioexagon is a bundled SVG mask in `desktop/plugin.js`, tinted with t
 theme's text colour. It renders before REST settles and needs neither an installed Desktop
 app nor network access. The legacy `/brand/devin` endpoint remains available to other clients.
 The smoke test checks the bundled mark with that endpoint unavailable.
+It also checks profile and connection isolation and that a live card fetches its
+persisted output when the run finishes, without a renderer reload.
 
 `tests/test_hermes_contract.py` checks the Hermes APIs the plugin relies on, in a subprocess. It runs when Hermes is importable from the Python in use, or when `HERMES_AGENT_DIR` points to a Hermes checkout. Otherwise it is skipped. On a Hermes venv on Windows the whole suite runs, with one POSIX-only test skipped.
 
