@@ -181,6 +181,14 @@ const fields = React.createElement(pluginModule.__testing.ModelFields, { loading
 const fieldsHtml = renderToStaticMarkup(fields)
 check('model picker renders grouped Fusion and conditional thinking', fieldsHtml.includes('optgroup') && fieldsHtml.includes('Sidekick') && fieldsHtml.includes('Thinking'))
 check('model picker shows catalog price and unchanged permissions', fieldsHtml.includes('Catalog pricing: variable') && fieldsHtml.includes('normal permissions'))
+const stalePlan = [{ content: 'Design palette', status: 'completed' }, { content: 'Implement toggle', status: 'in_progress' }, { content: 'Verify', status: 'pending' }]
+const livePlanHtml = renderToStaticMarkup(React.createElement(pluginModule.__testing.Plan, { plan: stalePlan, live: true }))
+const endedPlanHtml = renderToStaticMarkup(React.createElement(pluginModule.__testing.Plan, { plan: stalePlan, live: false }))
+const finishedPlanHtml = renderToStaticMarkup(React.createElement(pluginModule.__testing.Plan, { plan: stalePlan.map(e => ({ ...e, status: 'completed' })), live: false }))
+check('a live plan shows progress with the active step marked', livePlanHtml.includes('Plan · 1/3') && livePlanHtml.includes('circle-large-outline'))
+check('an ended run labels an unfinished plan as its last report, with no step in progress',
+  endedPlanHtml.includes('Plan · last reported 1/3') && endedPlanHtml.includes('stopped updating its plan') && !endedPlanHtml.includes('circle-large-outline'))
+check('a completed plan on an ended run stays a plain count', finishedPlanHtml.includes('Plan · 3/3') && !finishedPlanHtml.includes('last reported'))
 const cloudFields = renderToStaticMarkup(React.createElement(pluginModule.__testing.ModelFields, {
   loading: false, onChange() {}, data: { execution_target: 'cloud', cwd: '/private/local-folder',
     config_options: [

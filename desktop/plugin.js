@@ -413,19 +413,24 @@ function StateBadge({ state }) {
   })
 }
 
-function Plan({ plan }) {
+function Plan({ plan, live = true }) {
   if (!plan || plan.length === 0) {
     return null
   }
 
   const done = plan.filter(e => e.status === 'completed').length
+  // Devin does not always send a final plan update. Once the run has ended, an
+  // unfinished snapshot is history, not progress: say so and drop the
+  // in-progress marker instead of implying a step is still running.
+  const stale = !live && done < plan.length
 
   return jsxs('div', {
     style: { display: 'flex', flexDirection: 'column', gap: 4 },
     children: [
-      jsx('div', { style: S.label, children: `Plan · ${done}/${plan.length}` }),
+      jsx('div', { style: S.label, children: stale ? `Plan · last reported ${done}/${plan.length}` : `Plan · ${done}/${plan.length}` }),
+      stale ? jsx('div', { style: { ...S.muted, fontSize: 12 }, children: 'Devin stopped updating its plan before the run ended.' }) : null,
       ...plan.slice(0, 8).map((entry, i) => {
-        const status = entry.status
+        const status = stale && entry.status === 'in_progress' ? 'pending' : entry.status
         const icon = status === 'completed' ? 'pass-filled' : status === 'in_progress' ? 'circle-large-outline' : 'circle-large'
         const color = status === 'completed' ? 'var(--ui-green)' : status === 'in_progress' ? 'var(--ui-accent)' : 'var(--ui-text-quaternary)'
 
@@ -1129,7 +1134,7 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
           jsx('span', { children: run.model_cost_summary ? `Catalog pricing: ${run.model_cost_summary}` : 'Pricing not supplied; usage may incur charges.' })
         ]
       }) : null,
-      compact ? null : jsx(Plan, { plan: data.plan }),
+      compact ? null : jsx(Plan, { plan: data.plan, live }),
       compact ? null : jsx(Changes, { diffs: views.diffs, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os, live, truncated: views.diffsTruncated }),
       views.diffs.length && !compact ? null : jsx(Files, { files, cwd: cloud ? '' : run.cwd, os: !cloud && ctx && ctx.os }),
       compact ? null : jsx(Terminal, { commands: views.commands }),
@@ -1864,7 +1869,7 @@ function DevinChip() {
 }
 
 // For tests/desktop_smoke.mjs; Hermes Desktop only reads the default export.
-export const __testing = { ReviewPane, askHermes, ModelFields, groupedModels, taskRequest, liveViews }
+export const __testing = { ReviewPane, askHermes, ModelFields, groupedModels, taskRequest, liveViews, Plan }
 
 // --- plugin ----------------------------------------------------------------------
 

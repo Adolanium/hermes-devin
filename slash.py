@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from .models import ACTIVE_STATES
 from .runner import RunRefused
 
 if TYPE_CHECKING:  # pragma: no cover
     from .core import DevinPlugin
+
+ACTIVE_STATE_NAMES = frozenset(s.value for s in ACTIVE_STATES)
 
 USAGE = (
     "/devin [list | status <run_id> | cancel <run_id|all> | doctor]\n"
@@ -41,7 +44,13 @@ def make_handler(plugin: DevinPlugin):
             lines = [_fmt_row(data), f"cwd: {data.get('cwd')}  mode: {data.get('permission_mode')}"]
             if data.get("plan"):
                 done = sum(1 for e in data["plan"] if e.get("status") == "completed")
-                lines.append(f"plan: {done}/{len(data['plan'])} done")
+                total = len(data["plan"])
+                if done < total and data.get("state") not in ACTIVE_STATE_NAMES:
+                    # Devin can end a run without a final plan update; don't report a
+                    # stale snapshot as live progress.
+                    lines.append(f"plan: last reported {done}/{total} done (no later update from Devin)")
+                else:
+                    lines.append(f"plan: {done}/{total} done")
             for event in data.get("events") or []:
                 text = (event.get("text") or "").replace("\n", " ")[:160]
                 lines.append(f"  [{event.get('kind')}] {text}")
