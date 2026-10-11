@@ -50,7 +50,9 @@ plugins:
 | `backend` | `acp` | `acp`, `print` | How Devin is driven. See [How it works](how-it-works.md#why-acp-instead-of-devin--p). |
 | `permission_mode` | `normal` | `plan`, `normal`, `accept-edits`, `smart`, `dangerous`, `autonomous` | How much Devin may do without asking. Aliases: `auto` → `normal`; `yolo` and `bypass` → `dangerous`. |
 | `allow_dangerous` | `false` | bool | Required for `permission_mode: dangerous`. Without it the setting is rejected. |
-| `permission_requests` | `ask` | `ask`, `deny` | What happens to Devin's in-run permission prompts that the mode does not settle. `ask` relays them to you in foreground runs. Background runs always deny. |
+| `permission_requests` | `ask` | `ask`, `deny` | What happens to Devin's in-run permission prompts that the mode does not settle. `ask` relays them to you in foreground runs. Background runs deny them, unless the run card can answer (see `card_approvals`). |
+| `card_approvals` | `true` | | Background runs started from Hermes Desktop show Devin's requests on their run card, with Allow and Deny buttons, instead of denying them. |
+| `card_approval_timeout_seconds` | `300` | 30 to 3600 | How long a request waits on the run card before it is denied. |
 | `approval_scope` | `run` | `run`, `workspace` | What a remembered "always/session" approval covers: only the identical request, or any prompt in the same folder and mode. |
 | `allowed_roots` | `[]` | list of paths, or one path | When set, runs may only start inside these directories. |
 | `default_cwd` | `""` | path | Folder used when the call gives no `cwd`. Empty: Hermes' terminal working directory, then the process directory. A relative `cwd` is resolved against this. |

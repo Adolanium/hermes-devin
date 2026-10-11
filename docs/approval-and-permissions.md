@@ -76,8 +76,9 @@ Over ACP, Devin asks the client before actions its mode does not cover. The plug
 
 1. **The mode decides when it can.** Examples: `plan` denies an edit, `accept-edits` allows one, `dangerous` allows everything.
 2. **`permission_requests: deny`** denies whatever is left.
-3. **Background runs** deny whatever is left, because nobody is waiting.
-4. **Foreground runs** relay it to you as a Hermes approval prompt. The text is "Devin run dv-… asks to: Run `pytest` (kind: execute) in E:\Dev\myapp". The remembered rule key includes the mode, the kind of action, the folder and the action itself, so "always" covers only that exact request.
+3. **Foreground runs** relay it to you as a Hermes approval prompt. The text is "Devin run dv-… asks to: Run `pytest` (kind: execute) in E:\Dev\myapp". The remembered rule key includes the mode, the kind of action, the folder and the action itself, so "always" covers only that exact request. In Hermes Desktop the run card shows the request too, and points to the prompt.
+4. **Background runs started from Hermes Desktop** (`card_approvals`, on by default) show the request on the run card with **Allow** and **Deny** buttons, and Desktop sends a notification. A request nobody answers within `card_approval_timeout_seconds` (5 minutes by default) is denied. A foreground run moved to the background counts too.
+5. **Other background runs** deny whatever is left, because nobody is waiting.
 
 Every decision is recorded on the run, with its reason, and shown by `devin_run_result` and `/devin status`.
 

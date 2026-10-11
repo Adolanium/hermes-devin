@@ -35,7 +35,8 @@ const running = {
   id: 'dv-aaaaaaaaaa', title: 'Add type hints', state: 'running', background: true, cwd: 'C:\\work\\app',
   permission_mode: 'accept-edits', backend: 'acp', created_at: now - 40, started_at: now - 39, updated_at: now,
   tool_calls: 3, files_changed: ['C:\\work\\app\\src\\utils.py'], permission_requests: 1,
-  last_activity: 'Edit src/utils.py', usage: { tokens: { totalTokens: 15400 } }
+  last_activity: 'Edit src/utils.py', usage: { tokens: { totalTokens: 15400 } },
+  pending_permissions: [{ ask_id: 'abc123def456', title: 'Run `pytest -q`', kind: 'execute', via: 'card', expires_at: now + 200 }]
 }
 const failed = {
   id: 'dv-bbbbbbbbbb', title: 'Run the tests', state: 'failed', background: false, cwd: 'C:\\work\\app',
@@ -191,12 +192,14 @@ for (const fn of state.listeners['plugin.devin.run.progress'] || []) {
 }
 render('running card', directive.render({ attrs: { id: running.id }, streaming: false }),
   ['Add type hints', 'Working', 'utils.py', 'Read utils.py', 'Stop', 'Edit src/models.py', '15k tokens',
+   'Devin asks to', 'Run `pytest -q`', 'Allow', 'Deny', 'Denied automatically in',
    'Changes · 1 file', '+def add(a: int, b: int) -&gt; int:', 'following Devin', 'pytest -q', 'exit 0', 'npm test', 'tick 1'])
 render('finished card', directive.render({ attrs: { id: done.id }, streaming: false }), ['Create hello.txt', 'Done', 'hello.txt'])
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
 render('page', byArea('routes')[0].render(), ['Devin', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
-render('status chip', byArea('statusBar.right')[0].render(), ['Devin working'])
+render('status chip', byArea('statusBar.right')[0].render(), ['Devin needs you'])
+check('a waiting request alerts once', state.notices.filter(n => n.pet && n.pet.startsWith('Devin asks to')).length === 1, JSON.stringify(state.notices))
 
 // Finishing announces once.
 for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
@@ -204,7 +207,7 @@ for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
   fn({ type: 'plugin.devin.run.finished', payload })
   fn({ type: 'plugin.devin.run.finished', payload })
 }
-check('finish announces once on the pet', state.notices.filter(n => n.pet).length === 1, JSON.stringify(state.notices))
+check('finish announces once on the pet', state.notices.filter(n => n.pet && n.pet.startsWith('Devin finished')).length === 1, JSON.stringify(state.notices))
 
 if (failures.length) {
   console.error(`desktop smoke: ${failures.length} failure(s)`)

@@ -1,7 +1,7 @@
 # Known limitations
 
 - **Concurrent runs are refused, not queued.** When `max_concurrent_runs` is reached, a new run is refused, and the model is told to wait or cancel one.
-- **Background runs cannot ask you anything.** Devin's in-run permission prompts are denied in background runs. Use `accept-edits` or a wider mode if background runs need to edit files on their own.
+- **Background runs outside Hermes Desktop cannot ask you anything.** There, Devin's in-run permission prompts are denied. Background runs started from Desktop ask on their run card instead, and are denied if nobody answers in time. Use `accept-edits` or a wider mode if background runs need to edit files on their own.
 - **Background notices need a way in.** Outside the classic CLI, completion notices need `allow_gateway_injection: true` on the plugin entry. Without it, results are still available through `devin_run_result` and `/devin status`.
 - **Plan mode needs ACP**, and a Devin build that advertises a read-only session mode. If none is offered, the run is refused rather than run with more rights.
 - **`normal` is refused over ACP on current Devin.** Devin CLI 3000.x offers the ACP session modes `accept-edits`, `smart`, `ask`, `plan` and `bypass`. None of them asks before every edit, and Devin starts in `accept-edits`. So an ACP run with `permission_mode: normal` (or any mode Devin does not offer) is refused rather than run with more rights. Use `backend: print`, where `--permission-mode normal` makes Devin reject actions that need confirmation, or choose a mode Devin offers.
