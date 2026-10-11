@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import time
+from types import SimpleNamespace
 
+import pytest
 from conftest import PLUGIN_DIR, sub
 
 runner = sub("runner")
+core = sub("core")
+
+
+@pytest.mark.parametrize("name", ["HERMES_PLATFORM", "HERMES_SESSION_PLATFORM"])
+def test_explicit_platform_takes_precedence_over_desktop_source(monkeypatch, name):
+    monkeypatch.setenv(name, "telegram")
+    monkeypatch.setenv("HERMES_SESSION_SOURCE", "desktop")
+    assert core._session_platform() == "telegram"
 
 
 def _wait_pending(run, timeout: float = 10.0) -> dict:
@@ -33,10 +44,20 @@ def _start_background(h):
     return h.manager.get(started["run_id"])
 
 
-def test_background_desktop_run_asks_on_the_card(harness, monkeypatch):
-    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "desktop")
+@pytest.mark.parametrize("identity", ["platform_env", "source_env", "source_context"])
+def test_background_desktop_run_asks_on_the_card(harness, monkeypatch, identity):
+    if identity == "source_context":
+        monkeypatch.setenv("HERMES_SESSION_SOURCE", "cli")
+        monkeypatch.setitem(sys.modules, "gateway.session_context", SimpleNamespace(
+            get_session_env=lambda name: {"HERMES_SESSION_SOURCE": "desktop"}.get(name, "")))
+    else:
+        name = "HERMES_SESSION_PLATFORM" if identity == "platform_env" else "HERMES_SESSION_SOURCE"
+        monkeypatch.setenv(name, "desktop")
     h = harness(scenario="permission")
-    run = _start_background(h)
+    started = h.call("delegate_to_devin", {"prompt": "x", "background": True})
+    run = h.manager.get(started["run_id"])
+    assert run.desktop is True
+    assert started["card"] == f'::devin-run{{id="{run.id}"}}'
     first = _wait_pending(run)
     assert first["via"] == "card" and "rm -rf build" in first["title"] and first["expires_at"] > time.time()
     assert run.summary()["pending_permissions"][0]["ask_id"] == first["ask_id"]
@@ -87,9 +108,14 @@ def test_cancel_releases_a_waiting_card_request(harness, monkeypatch):
     assert run.pending_permissions == {}
 
 
-def test_background_outside_desktop_still_denies(harness):
+@pytest.mark.parametrize("source", ["", "cli", "tui", "telegram"])
+def test_background_outside_desktop_still_denies(harness, monkeypatch, source):
+    monkeypatch.setenv("HERMES_SESSION_SOURCE", "desktop")
+    monkeypatch.setitem(sys.modules, "gateway.session_context", SimpleNamespace(
+        get_session_env=lambda name: {"HERMES_SESSION_SOURCE": source}.get(name, "")))
     h = harness(scenario="permission")
     run = _start_background(h)
+    assert run.desktop is False
     assert run.settled.wait(20)
     assert all(p.reason == "no one can answer prompts for a background run" for p in run.permissions)
 

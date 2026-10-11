@@ -80,6 +80,10 @@ Over ACP, Devin asks the client before actions its mode does not cover. The plug
 4. **Background runs started from Hermes Desktop** (`card_approvals`, on by default) show the request on the run card with **Allow** and **Deny** buttons, and Desktop sends a notification. A request nobody answers within `card_approval_timeout_seconds` (5 minutes by default) is denied. A foreground run moved to the background counts too.
 5. **Other background runs** deny whatever is left, because nobody is waiting.
 
+Desktop identity is read from Hermes' session context, including `HERMES_SESSION_SOURCE`.
+This applies to initial delegated runs as well as card follow-ups; an unknown or non-Desktop
+session does not gain permission-card routing.
+
 Every decision is recorded on the run, with its reason, and shown by `devin_run_result` and `/devin status`.
 
 ## Output coming back

@@ -42,13 +42,17 @@ def _json(data: dict[str, Any]) -> str:
 
 
 def _session_platform() -> str:
-    """The frontend of the current session, read the way Hermes' prompt builder reads it."""
-    platform = os.environ.get("HERMES_PLATFORM") or os.environ.get("HERMES_SESSION_PLATFORM")
+    """The frontend from Hermes' session context, or the legacy environment."""
+    platform = os.environ.get("HERMES_PLATFORM")
     if platform:
         return platform.strip().lower()
     get_session_env = getattr(sys.modules.get("gateway.session_context"), "get_session_env", None)
     try:
-        return str((get_session_env("HERMES_SESSION_PLATFORM") if get_session_env else "") or "").strip().lower()
+        for name in ("HERMES_SESSION_PLATFORM", "HERMES_SESSION_SOURCE"):
+            value = get_session_env(name) if get_session_env else os.environ.get(name)
+            if value and str(value).strip():
+                return str(value).strip().lower()
+        return ""
     except Exception:
         return ""
 
