@@ -214,7 +214,7 @@ const thread = render('finished card', directive.render({ attrs: { id: done.id }
 check('the follow-up box sits only on the newest run of a thread', (thread.match(/Send to Devin/g) || []).length === 1)
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
-const page = render('page', byArea('routes')[0].render(), ['Devin × Hermes', 'nous-girl-dark.png', 'mask-image', 'Devin is at work', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+const page = render('page', byArea('routes')[0].render(), ['Devin <span', 'Hermes', 'nous-girl-dark.png', 'mask-image', '1 working', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
 check('follow-ups are not listed as separate history rows', !page.includes('Follow-up: also add tests'))
 render('review tab', React.createElement(pluginModule.__testing.ReviewPane, { runId: running.id, ctx }),
   ['Add type hints', 'utils.py', '+def add(a: int, b: int) -&gt; int:', 'Show in folder'])

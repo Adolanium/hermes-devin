@@ -259,20 +259,10 @@ const CSS = `
 .devin-in { animation: devin-in 0.25s ease-out; }
 .devin-sweep { position: absolute; left: 0; right: 0; top: 0; height: 2px; overflow: hidden; }
 .devin-sweep::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--ui-accent), var(--ui-cyan), transparent); animation: devin-sweep 1.4s linear infinite; }
-@keyframes devin-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
-@keyframes devin-aurora { 0%, 100% { transform: translate(-5%, -4%) rotate(0deg); } 50% { transform: translate(5%, 4%) rotate(6deg); } }
-@keyframes devin-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-accent) 40%, transparent); } 50% { box-shadow: 0 0 0 7px transparent; } }
-.devin-aurora { position: absolute; inset: -45%; pointer-events: none; filter: blur(12px); animation: devin-aurora 20s ease-in-out infinite;
-  background: radial-gradient(38% 32% at 32% 42%, color-mix(in srgb, var(--ui-accent) 24%, transparent), transparent 70%),
-    radial-gradient(34% 30% at 68% 58%, color-mix(in srgb, var(--ui-cyan) 18%, transparent), transparent 70%),
-    radial-gradient(28% 26% at 50% 18%, color-mix(in srgb, var(--ui-purple) 16%, transparent), transparent 70%); }
-.devin-gradient-text { background: linear-gradient(90deg, var(--ui-text-primary), var(--ui-accent), var(--ui-cyan), var(--ui-purple), var(--ui-text-primary)); background-size: 300% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: devin-flow 10s linear infinite; }
-.devin-shimmer { animation: devin-flow 5s linear infinite; }
-.devin-link { background: linear-gradient(90deg, transparent, var(--ui-accent), var(--ui-cyan), var(--ui-purple), transparent); background-size: 300% 100%; }
-.devin-link-live { animation: devin-flow 1.8s linear infinite; }
+@keyframes devin-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .devin-pulse { animation: devin-pulse 2.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .devin-aurora, .devin-gradient-text, .devin-shimmer, .devin-link-live, .devin-pulse, .devin-sweep::after, .devin-flash, .devin-in { animation: none; }
+  .devin-pulse, .devin-sweep::after, .devin-flash, .devin-in { animation: none; }
 }
 .devin-row:hover { background: var(--ui-row-hover-background); }
 `
@@ -295,10 +285,9 @@ async function loadBrand() {
   }
 }
 
-const BRAND_FILL = 'linear-gradient(135deg, var(--ui-accent), var(--ui-cyan), var(--ui-purple), var(--ui-accent))'
 
-/** Devin's hexagon mark, filled with the app's accent gradient. */
-function DevinMark({ size = 20, animated = false }) {
+/** Devin's hexagon mark in the theme's text colour. */
+function DevinMark({ size = 20 }) {
   const mask = useValue($devinMark)
 
   if (!mask) {
@@ -308,14 +297,12 @@ function DevinMark({ size = 20, animated = false }) {
   return jsx('span', {
     'aria-label': 'Devin',
     role: 'img',
-    className: animated ? 'devin-shimmer' : undefined,
     style: {
       display: 'inline-block',
       flex: 'none',
       width: size,
       height: size,
-      background: BRAND_FILL,
-      backgroundSize: '300% 300%',
+      background: 'var(--ui-text-primary)',
       WebkitMaskImage: mask,
       maskImage: mask,
       WebkitMaskRepeat: 'no-repeat',
@@ -349,115 +336,84 @@ function HermesMark({ size = 20 }) {
   })
 }
 
-/** The two marks as one badge: Devin in front, Hermes tucked into the corner. */
+/** The two app icons as an overlapping pair: Devin's tile, then the Hermes badge. */
 function PairBadge({ size = 28, live = false }) {
-  return jsxs('span', {
-    className: live ? 'devin-pulse' : undefined,
-    style: {
-      position: 'relative',
-      display: 'grid',
-      placeItems: 'center',
-      width: size,
-      height: size,
-      flex: 'none',
-      borderRadius: Math.round(size * 0.28),
-      background: 'color-mix(in srgb, var(--ui-accent) 13%, transparent)',
-      border: '1px solid color-mix(in srgb, var(--ui-accent) 28%, transparent)'
-    },
-    children: [
-      jsx(DevinMark, { size: Math.round(size * 0.6), animated: live }),
-      jsx('span', {
-        style: { position: 'absolute', right: -5, bottom: -5, display: 'grid', placeItems: 'center' },
-        children: jsx(HermesMark, { size: Math.round(size * 0.52) })
-      })
-    ]
-  })
-}
+  const radius = Math.round(size * 0.27)
 
-function BrandTile({ children, live }) {
-  return jsx('span', {
-    className: live ? 'devin-pulse' : undefined,
-    style: {
-      position: 'relative',
-      display: 'grid',
-      placeItems: 'center',
-      width: 72,
-      height: 72,
-      flex: 'none',
-      borderRadius: 20,
-      background: 'color-mix(in srgb, var(--ui-text-primary) 5%, transparent)',
-      border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 55%, transparent)',
-      boxShadow: '0 10px 30px -12px color-mix(in srgb, var(--ui-accent) 45%, transparent)',
-      backdropFilter: 'blur(6px)'
-    },
-    children
-  })
-}
-
-function Connector({ live }) {
   return jsxs('span', {
-    style: { position: 'relative', display: 'flex', alignItems: 'center', width: 132, height: 72, flex: 'none' },
+    'aria-label': 'Devin × Hermes',
+    role: 'img',
+    style: { position: 'relative', display: 'inline-flex', alignItems: 'center', flex: 'none' },
     children: [
       jsx('span', {
-        className: live ? 'devin-link devin-link-live' : 'devin-link',
-        style: { position: 'absolute', left: 6, right: 6, top: '50%', height: 2, marginTop: -1, borderRadius: 2, opacity: live ? 1 : 0.55 }
-      }),
-      jsx('span', {
-        className: 'wordmark',
         style: {
-          position: 'relative',
-          margin: '0 auto',
           display: 'grid',
           placeItems: 'center',
-          width: 30,
-          height: 30,
-          borderRadius: 999,
-          fontSize: 15,
-          letterSpacing: 0,
-          color: 'var(--ui-text-primary)',
-          background: 'var(--ui-editor-surface-background, var(--ui-surface-background, transparent))',
-          border: '1px solid color-mix(in srgb, var(--ui-accent) 45%, transparent)'
+          width: size,
+          height: size,
+          borderRadius: radius,
+          background: 'color-mix(in srgb, var(--ui-text-primary) 7%, var(--ui-editor-surface-background, transparent))',
+          border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 55%, transparent)'
         },
-        children: '×'
-      })
+        children: jsx(DevinMark, { size: Math.round(size * 0.58) })
+      }),
+      jsx('span', {
+        style: {
+          display: 'grid',
+          placeItems: 'center',
+          width: size,
+          height: size,
+          marginLeft: -Math.round(size * 0.22),
+          borderRadius: radius,
+          overflow: 'hidden',
+          boxShadow: '0 0 0 2px var(--ui-editor-surface-background, var(--ui-surface-background, transparent))'
+        },
+        children: jsx(HermesMark, { size })
+      }),
+      live
+        ? jsx('span', {
+            className: 'devin-pulse',
+            style: {
+              position: 'absolute',
+              right: -2,
+              top: -2,
+              width: Math.max(6, Math.round(size * 0.22)),
+              height: Math.max(6, Math.round(size * 0.22)),
+              borderRadius: 999,
+              background: 'var(--ui-green)',
+              boxShadow: '0 0 0 2px var(--ui-editor-surface-background, var(--ui-surface-background, transparent))'
+            }
+          })
+        : null
     ]
   })
 }
 
-function Hero({ live }) {
+/** The page header: the pair, the name, one line of context, and what Devin is doing now. */
+function BrandHeader({ live, active }) {
   return jsxs('div', {
-    style: {
-      position: 'relative',
-      overflow: 'hidden',
-      borderRadius: 18,
-      padding: '34px 24px 30px',
-      border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 40%, transparent)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: 16,
-      textAlign: 'center'
-    },
+    style: { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
     children: [
-      jsx('div', { className: 'devin-aurora', 'aria-hidden': true }),
+      jsx(PairBadge, { size: 40, live }),
       jsxs('div', {
-        style: { position: 'relative', display: 'flex', alignItems: 'center' },
+        style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 260px' },
         children: [
-          jsx(BrandTile, { live, children: jsx(DevinMark, { size: 38, animated: true }) }),
-          jsx(Connector, { live }),
-          jsx(BrandTile, { live, children: jsx(HermesMark, { size: 52 }) })
+          jsxs('h1', {
+            style: { margin: 0, fontSize: 18, fontWeight: 650, letterSpacing: '-0.01em', color: 'var(--ui-text-primary)' },
+            children: ['Devin ', jsx('span', { style: { color: 'var(--ui-text-quaternary)', fontWeight: 400 }, children: '×' }), ' Hermes']
+          }),
+          jsx('span', {
+            style: { fontSize: 13, color: 'var(--ui-text-tertiary)' },
+            children: 'Hermes plans the task and asks you first. Devin writes the code on this machine.'
+          })
         ]
       }),
-      jsx('div', {
-        className: 'wordmark devin-gradient-text',
-        style: { position: 'relative', fontSize: 'clamp(30px, 5.2vw, 56px)', whiteSpace: 'nowrap' },
-        children: 'Devin × Hermes'
-      }),
-      jsx('p', {
-        style: { position: 'relative', margin: 0, maxWidth: 560, color: 'var(--ui-text-secondary)', lineHeight: 1.5 },
-        children: live
-          ? 'Devin is at work. Every edit, command and question shows up here as it happens.'
-          : 'Hermes plans the task and asks you first. Devin writes the code on this machine. You watch every line land.'
+      jsxs('span', {
+        style: S.pill(live ? 'var(--ui-green)' : 'var(--ui-text-tertiary)'),
+        children: [
+          jsx('span', { style: { width: 6, height: 6, borderRadius: 999, background: live ? 'var(--ui-green)' : 'var(--ui-text-quaternary)' } }),
+          live ? `${active} working` : 'Idle'
+        ]
       })
     ]
   })
@@ -1100,7 +1056,7 @@ function RunCard({ runId, ctx, compact = false, wide = false }) {
           jsxs('div', {
             style: { ...S.row, flex: 1 },
             children: [
-              jsx(PairBadge, { size: 30, live }),
+              jsx(PairBadge, { size: 24, live }),
               jsxs('div', {
                 style: { display: 'flex', flexDirection: 'column', minWidth: 0 },
                 children: [
@@ -1556,8 +1512,7 @@ function DevinPage({ ctx }) {
         jsxs('header', {
           style: { display: 'flex', flexDirection: 'column', gap: 14 },
           children: [
-            jsx('h1', { style: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }, children: 'Devin × Hermes' }),
-            jsx(Hero, { live: active.length > 0 }),
+            jsx(BrandHeader, { live: active.length > 0, active: active.length }),
             all.length
               ? jsxs('div', {
                   style: { display: 'flex', flexWrap: 'wrap', gap: 10 },
@@ -1665,7 +1620,7 @@ function DevinChip() {
       children: waiting.length
         ? [jsx(Codicon, { name: 'shield', style: { fontSize: 12 } }), jsx('span', { children: 'Devin needs you' })]
         : [
-            jsx(DevinMark, { size: 12, animated: true }),
+            jsx(DevinMark, { size: 12 }),
             jsx(GlyphSpinner, { ariaLabel: 'Devin is working' }),
             jsx('span', { children: active.length === 1 ? 'Devin working' : `Devin · ${active.length} running` })
           ]
