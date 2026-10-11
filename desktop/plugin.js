@@ -336,40 +336,27 @@ function HermesMark({ size = 20 }) {
   })
 }
 
-/** The two app icons as an overlapping pair: Devin's tile, then the Hermes badge. */
+/** The two app icons side by side on matching tiles: Devin, then Hermes. */
 function PairBadge({ size = 28, live = false }) {
-  const radius = Math.round(size * 0.27)
+  const tile = {
+    display: 'grid',
+    placeItems: 'center',
+    width: size,
+    height: size,
+    flex: 'none',
+    overflow: 'hidden',
+    borderRadius: Math.round(size * 0.27),
+    background: 'color-mix(in srgb, var(--ui-text-primary) 7%, var(--ui-editor-surface-background, transparent))',
+    border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 55%, transparent)'
+  }
 
   return jsxs('span', {
     'aria-label': 'Devin × Hermes',
     role: 'img',
-    style: { position: 'relative', display: 'inline-flex', alignItems: 'center', flex: 'none' },
+    style: { position: 'relative', display: 'inline-flex', alignItems: 'center', gap: Math.max(4, Math.round(size * 0.15)), flex: 'none' },
     children: [
-      jsx('span', {
-        style: {
-          display: 'grid',
-          placeItems: 'center',
-          width: size,
-          height: size,
-          borderRadius: radius,
-          background: 'color-mix(in srgb, var(--ui-text-primary) 7%, var(--ui-editor-surface-background, transparent))',
-          border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 55%, transparent)'
-        },
-        children: jsx(DevinMark, { size: Math.round(size * 0.58) })
-      }),
-      jsx('span', {
-        style: {
-          display: 'grid',
-          placeItems: 'center',
-          width: size,
-          height: size,
-          marginLeft: -Math.round(size * 0.22),
-          borderRadius: radius,
-          overflow: 'hidden',
-          boxShadow: '0 0 0 2px var(--ui-editor-surface-background, var(--ui-surface-background, transparent))'
-        },
-        children: jsx(HermesMark, { size })
-      }),
+      jsx('span', { style: tile, children: jsx(DevinMark, { size: Math.round(size * 0.56) }) }),
+      jsx('span', { style: tile, children: jsx(HermesMark, { size: Math.round(size * 0.86) }) }),
       live
         ? jsx('span', {
             className: 'devin-pulse',
