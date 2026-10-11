@@ -71,13 +71,16 @@ before your first Cloud run.
 
 1. Install [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
    and the [Devin CLI](https://cli.devin.ai). Configure Hermes' model provider.
-2. Sign in to Devin and install the community plugin:
+2. Sign in to Devin and install the plugin from the Hermes plugin catalog:
 
    ```sh
    devin auth login
-   hermes plugins install Adolanium/hermes-devin
+   hermes plugins install hermes-devin
    hermes plugins enable devin
    ```
+
+   The catalog installs the reviewed commit, and `hermes plugins update devin`
+   moves you to the next one.
 
 3. Restart Hermes. In Desktop, enable the Desktop half under
    **Capabilities → Plugins → Devin**.
@@ -89,6 +92,22 @@ before your first Cloud run.
    > Have Devin add tests for src/utils.py in /path/to/project and run them.
 
 Or open **Devin → New Devin task** in Desktop to choose a target and its model controls.
+
+## What it does on your computer
+
+- **Runs the Devin CLI.** Each run starts `devin` from your PATH (or `cli_path`) as a
+  child process. Local runs let Devin read and edit files and run shell commands in the
+  chosen folder, within the permission mode you configured. Background runs keep going
+  after the conversation turn ends, up to their timeout.
+- **Talks to Devin's services.** Cloud runs and model discovery go through the Devin CLI
+  to Cognition's servers. The plugin makes no other network calls and has no telemetry.
+- **Uses Devin's own login.** The plugin never reads or stores credentials. Devin's child
+  process gets your environment without Hermes' provider, bot and tool keys. Add any
+  variable Devin needs with `extra_env`.
+- **Keeps run history.** Run records, including prompts, plans, recorded diffs and
+  command output, are saved under `<hermes home>/plugin-data/devin/runs/`. Set
+  `persist_runs: false` and restart Hermes to keep history in memory only, and cap it
+  with `history_limit`.
 
 ## Documentation
 

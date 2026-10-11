@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 from conftest import sub
 
@@ -106,3 +109,14 @@ def test_env_permission_mode_cannot_be_overridden(harness, monkeypatch):
     result = h.call("delegate_to_devin", {"prompt": "x"})
     assert result["state"] == "succeeded"
     assert {e["env_mode"] for e in h.log_entries()} == {"normal"}
+
+
+def test_child_env_drops_hermes_credentials(monkeypatch):
+    config, runner = sub("config"), sub("runner")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "hermes-secret")
+    scrubbed = types.ModuleType("tools.environments.local")
+    scrubbed.hermes_subprocess_env = lambda: {"PATH": "/bin"}
+    monkeypatch.setitem(sys.modules, "tools.environments.local", scrubbed)
+    env = runner.RunManager._child_env(None, config.DevinConfig(extra_env={"FOO": "1"}))
+    assert "OPENROUTER_API_KEY" not in env
+    assert env["PATH"] == "/bin" and env["FOO"] == "1"

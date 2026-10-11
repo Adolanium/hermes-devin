@@ -34,6 +34,18 @@ logger = logging.getLogger(__name__)
 AUTH_CACHE_SECONDS = 300
 
 
+def _base_child_env() -> dict[str, str]:
+    """The parent environment minus Hermes' own provider, bot and tool credentials.
+
+    Devin signs in with its own CLI login, so it never needs Hermes' keys.
+    """
+    try:
+        from tools.environments.local import hermes_subprocess_env
+    except ImportError:  # Hermes without the shared sanitizer
+        return dict(os.environ)
+    return hermes_subprocess_env()
+
+
 class RunRefused(Exception):
     """A run could not be started. ``code`` is an :class:`ErrorCode` value or a refusal reason."""
 
@@ -480,7 +492,7 @@ class RunManager:
         return run
 
     def _child_env(self, cfg: DevinConfig) -> dict[str, str]:
-        env = dict(os.environ)
+        env = _base_child_env()
         env.update(cfg.extra_env)
         # The permission mode comes from plugin settings only. Anything inherited
         # from the parent environment is overwritten.

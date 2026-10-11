@@ -1365,9 +1365,8 @@ function groupedModels(choices, query = '') {
   const needle = query.trim().toLocaleLowerCase()
   for (const choice of choices || []) {
     const family = choice.family || choice.group || (choice.name.startsWith('Fusion') ? 'Fusion' : 'Models')
-    if (needle && !`${family} ${choice.label || choice.name} ${choice.description || ''}`.toLocaleLowerCase().includes(needle)) {
-      continue
-    }
+    const haystack = `${family} ${choice.label || choice.name} ${choice.description || ''}`.toLocaleLowerCase()
+    if (needle && !haystack.includes(needle)) continue
     if (!groups.has(family)) groups.set(family, [])
     groups.get(family).push(choice)
   }

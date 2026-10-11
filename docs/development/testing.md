@@ -63,8 +63,7 @@ What the suite covers:
 
 The Devin trioexagon is a bundled SVG mask in `desktop/plugin.js`, tinted with the current
 theme's text colour. It renders before REST settles and needs neither an installed Desktop
-app nor network access. The legacy `/brand/devin` endpoint remains available to other clients.
-The smoke test checks the bundled mark with that endpoint unavailable.
+app nor network access. The smoke test checks that the mark never asks the dashboard for one.
 It also checks profile and connection isolation and that a live card fetches its
 persisted output when the run finishes, without a renderer reload.
 

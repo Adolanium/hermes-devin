@@ -40,12 +40,16 @@ devin auth status
 Use the Hermes installation and profile where you want the plugin:
 
 ```sh
-hermes plugins install Adolanium/hermes-devin
+hermes plugins install hermes-devin
 hermes plugins enable devin
 ```
 
-The plugin key is `devin`. GitHub installation uses your Git credentials, so you
-need repository access if it is private. A linked development checkout and a Git
+`hermes-devin` is the catalog entry, which installs the reviewed commit. The plugin
+key Hermes uses after installation is `devin`. Run `hermes plugins update devin`
+to move to the next reviewed commit.
+
+To track the repository instead of the catalog, install `Adolanium/hermes-devin`.
+That install does not follow catalog updates. A linked development checkout and a Git
 installation cannot occupy the same plugin directory. See
 [local development](../../CONTRIBUTING.md#use-a-local-checkout).
 

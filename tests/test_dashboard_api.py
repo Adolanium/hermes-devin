@@ -92,20 +92,6 @@ def test_live_runs_win_and_can_be_cancelled(harness, tmp_path):
     assert h.manager.get(run_id).cancel_reason == "cancelled from Hermes Desktop"
 
 
-def test_devin_mark_comes_from_the_local_devin_app(tmp_path):
-    api = _api()
-    missing = tmp_path / "missing.svg"
-    good = tmp_path / "good.svg"
-    good.write_text('<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>', encoding="utf-8")
-    scripted = tmp_path / "bad.svg"
-    scripted.write_text("<svg><script>alert(1)</script></svg>", encoding="utf-8")
-    not_svg = tmp_path / "x.svg"
-    not_svg.write_text("hello", encoding="utf-8")
-    assert api.devin_mark([missing, scripted, not_svg, good]).startswith("<svg")
-    assert api.devin_mark([missing, scripted]) is None
-    assert all(str(p).endswith("letterpress-dark.svg") for p in api.devin_mark_candidates())
-
-
 def test_live_model_controls_use_active_profile_registry_not_other_modules(monkeypatch):
     import sys
     import types
