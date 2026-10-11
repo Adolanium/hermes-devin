@@ -52,6 +52,8 @@ What the suite covers:
 - **Stopping:** interrupts, cancels, timeouts and real process-tree kills, plus mocked Windows kill paths
 - **Parts:** settings, the run model, events, the store, the slash command and the dashboard API
 
+`tests/test_desktop_half.py` renders the Desktop half under Node: it loads `desktop/plugin.js` with a stub `@hermes/plugin-sdk` and the real React from a Hermes Agent install, feeds it run events and renders the card, the page and the status-bar chip, so a typo in a `jsx()` call fails here instead of in Desktop. It needs `node` and a `node_modules` with `react` and `react-dom` (set `HERMES_DESKTOP_NODE_MODULES`, or it looks in the usual Hermes install folders); otherwise it is skipped. Run it directly with `node tests/desktop_smoke.mjs <node_modules>`.
+
 `tests/test_hermes_contract.py` checks the Hermes APIs the plugin relies on, in a subprocess. It runs when Hermes is importable from the Python in use, or when `HERMES_AGENT_DIR` points to a Hermes checkout. Otherwise it is skipped. On a Hermes venv on Windows the whole suite runs, with one POSIX-only test skipped.
 
 ## Lint

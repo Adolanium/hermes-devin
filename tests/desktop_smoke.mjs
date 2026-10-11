@@ -1,0 +1,203 @@
+// Render smoke test for desktop/plugin.js.
+//
+// The Desktop half is plain ESM that only runs inside Hermes Desktop, so a
+// typo in a jsx() call is a ReferenceError nobody sees until a run renders.
+// This loads the file with a stub `@hermes/plugin-sdk` and the real React,
+// registers it, feeds it run events and renders every surface to a string.
+//
+// Usage: node tests/desktop_smoke.mjs <node_modules dir that has react + react-dom>
+
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const modules = process.argv[2]
+const require = createRequire(path.join(modules, 'noop.js'))
+const reactUrl = pathToFileURL(require.resolve('react')).href
+const jsxUrl = pathToFileURL(require.resolve('react/jsx-runtime')).href
+const React = require('react')
+const { renderToStaticMarkup } = require('react-dom/server')
+
+const failures = []
+const check = (name, ok, detail = '') => {
+  if (!ok) {
+    failures.push(`${name}${detail ? `: ${detail}` : ''}`)
+  }
+}
+
+// --- fixtures ---------------------------------------------------------------------
+
+const now = Date.now() / 1000
+const running = {
+  id: 'dv-aaaaaaaaaa', title: 'Add type hints', state: 'running', background: true, cwd: 'C:\\work\\app',
+  permission_mode: 'accept-edits', backend: 'acp', created_at: now - 40, started_at: now - 39, updated_at: now,
+  tool_calls: 3, files_changed: ['C:\\work\\app\\src\\utils.py'], permission_requests: 1,
+  last_activity: 'Edit src/utils.py', usage: { tokens: { totalTokens: 15400 } }
+}
+const failed = {
+  id: 'dv-bbbbbbbbbb', title: 'Run the tests', state: 'failed', background: false, cwd: 'C:\\work\\app',
+  permission_mode: 'normal', backend: 'print', created_at: now - 600, finished_at: now - 590, updated_at: now - 590,
+  tool_calls: 0, files_changed: [], error: { code: 'permission_denied', message: 'Devin stopped without an answer' }
+}
+const done = {
+  id: 'dv-cccccccccc', title: 'Create hello.txt', state: 'succeeded', background: false, cwd: 'C:\\work\\app',
+  permission_mode: 'accept-edits', backend: 'acp', created_at: now - 300, finished_at: now - 290, updated_at: now - 290,
+  tool_calls: 2, files_changed: ['C:\\work\\app\\hello.txt']
+}
+const details = {
+  [running.id]: {
+    ...running,
+    plan: [
+      { content: 'Read utils.py', status: 'completed' },
+      { content: 'Add hints', status: 'in_progress' },
+      { content: 'Run tests', status: 'pending' }
+    ],
+    permissions: [{ decision: 'allowed', title: 'Run pytest', kind: 'execute' }],
+    events: [
+      { seq: 1, kind: 'tool_call', text: 'Read src/utils.py', data: { tool_kind: 'read' } },
+      { seq: 2, kind: 'tool_call', text: 'Edit src/utils.py', data: { tool_kind: 'edit' } },
+      { seq: 3, kind: 'permission', text: 'allowed: Run pytest', data: {} }
+    ]
+  },
+  [failed.id]: { ...failed, events: [], permissions: [] },
+  [done.id]: { ...done, events: [], permissions: [], plan: [], output: 'Created **hello.txt**.' }
+}
+
+// --- the stub SDK -----------------------------------------------------------------
+
+globalThis.__devinSmoke = { React, details, listeners: {}, contributions: [], notices: [] }
+
+const sdk = `
+const { React, details, notices } = globalThis.__devinSmoke
+const h = React.createElement
+export function atom(value) {
+  const subs = new Set()
+  return { get: () => value, set: next => { value = next; subs.forEach(fn => fn(value)) }, listen: fn => (subs.add(fn), () => subs.delete(fn)) }
+}
+export function useValue(store) {
+  return React.useSyncExternalStore(store.listen, store.get, store.get)
+}
+export function useQuery({ queryKey, enabled }) {
+  return { data: enabled === false ? undefined : details[queryKey[2]], isError: false }
+}
+export const queryClient = { invalidateQueries: () => Promise.resolve() }
+export const host = {
+  notify: n => notices.push(n), navigate: () => {}, onEvent: () => () => {},
+  state: {}, request: () => Promise.resolve({})
+}
+export const Button = ({ children, onClick, disabled }) => h('button', { onClick, disabled }, children)
+export const Codicon = ({ name }) => h('i', { 'data-icon': name })
+export const GlyphSpinner = () => h('span', null, '*')
+export const Tip = ({ children }) => children
+export const MessageTextContent = ({ text }) => h('div', { 'data-md': true }, text)
+export const PALETTE_AREA = 'palette'
+export const ROUTES_AREA = 'routes'
+export const SIDEBAR_NAV_AREA = 'sidebarNav'
+export const STATUSBAR_AREAS = { left: 'statusBar.left', right: 'statusBar.right' }
+export const TRANSCRIPT_DIRECTIVE_AREA = 'transcript.directive'
+`
+
+// --- load the plugin --------------------------------------------------------------
+
+const dir = mkdtempSync(path.join(tmpdir(), 'devin-desktop-smoke-'))
+const sdkFile = path.join(dir, 'sdk.mjs')
+writeFileSync(sdkFile, sdk)
+
+const source = readFileSync(path.join(here, '..', 'desktop', 'plugin.js'), 'utf8')
+const imports = [...source.matchAll(/from\s+'([^']+)'/g)].map(m => m[1])
+check('imports stay inside the SDK surface', imports.every(s => ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime'].includes(s)), imports.join(', '))
+
+const rewritten = source
+  .replace(/from\s+'@hermes\/plugin-sdk'/g, `from '${pathToFileURL(sdkFile).href}'`)
+  .replace(/from\s+'react\/jsx-runtime'/g, `from '${jsxUrl}'`)
+  .replace(/from\s+'react'/g, `from '${reactUrl}'`)
+const pluginFile = path.join(dir, 'plugin.mjs')
+writeFileSync(pluginFile, rewritten)
+
+globalThis.document = {
+  createElement: () => ({ dataset: {}, remove() {}, set textContent(_) {} }),
+  head: { appendChild() {} }
+}
+
+const plugin = (await import(pathToFileURL(pluginFile).href)).default
+check('default export has id devin', plugin && plugin.id === 'devin')
+
+const state = globalThis.__devinSmoke
+const restCalls = []
+const ctx = {
+  source: 'plugin:devin',
+  rest: async (p, opts) => {
+    restCalls.push([p, opts])
+    if (p.startsWith('/runs?')) {
+      return { runs: [running, failed, done], live: true }
+    }
+    return details[p.split('/')[2]?.split('?')[0]] || {}
+  },
+  register: c => (state.contributions.push(c), () => {}),
+  registerMany: cs => (state.contributions.push(...cs), () => {}),
+  onEvent: (type, fn) => ((state.listeners[type] ||= []).push(fn), () => {}),
+  onDispose: () => {},
+  setInterval: () => () => {},
+  setTimeout: () => () => {},
+  os: { revealPath: async () => true, notify: n => state.notices.push(n) },
+  pet: { say: line => state.notices.push({ pet: line }) },
+  storage: { get: (_, f) => f, set() {}, remove() {} }
+}
+
+plugin.register(ctx)
+await new Promise(r => setTimeout(r, 20))
+
+const byArea = area => state.contributions.filter(c => c.area === area)
+check('registers a devin-run directive', byArea('transcript.directive').some(c => c.data && c.data.name === 'devin-run'))
+check('registers the /devin page', byArea('routes').some(c => c.data && c.data.path === '/devin'))
+check('registers a sidebar row', byArea('sidebarNav').length === 1)
+check('registers a status-bar chip', byArea('statusBar.right').length === 1)
+check('subscribes to run events', Object.keys(state.listeners).includes('plugin.devin.run.progress'))
+
+// Live event: the running run moves.
+for (const fn of state.listeners['plugin.devin.run.progress'] || []) {
+  fn({ type: 'plugin.devin.run.progress', payload: { type: 'run.progress', run_id: running.id, run: running, event: { seq: 4, kind: 'tool_call', text: 'Edit src/models.py', data: { tool_kind: 'edit' } } } })
+}
+
+const render = (name, node, expect = []) => {
+  try {
+    const html = renderToStaticMarkup(node)
+    for (const text of expect) {
+      check(`${name} shows ${JSON.stringify(text)}`, html.includes(text), html.slice(0, 300))
+    }
+    return html
+  } catch (error) {
+    check(`${name} renders`, false, error && error.stack ? error.stack.split('\n').slice(0, 3).join(' | ') : String(error))
+    return ''
+  }
+}
+
+const directive = byArea('transcript.directive')[0].data
+render('running card', directive.render({ attrs: { id: running.id }, streaming: false }),
+  ['Add type hints', 'Working', 'utils.py', 'Read utils.py', 'Stop', 'Edit src/models.py', '15k tokens'])
+render('finished card', directive.render({ attrs: { id: done.id }, streaming: false }), ['Create hello.txt', 'Done', 'hello.txt'])
+render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
+check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
+render('page', byArea('routes')[0].render(), ['Devin', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+render('status chip', byArea('statusBar.right')[0].render(), ['Devin working'])
+
+// Finishing announces once.
+for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
+  const payload = { type: 'run.finished', run_id: done.id, run: done }
+  fn({ type: 'plugin.devin.run.finished', payload })
+  fn({ type: 'plugin.devin.run.finished', payload })
+}
+check('finish announces once on the pet', state.notices.filter(n => n.pet).length === 1, JSON.stringify(state.notices))
+
+if (failures.length) {
+  console.error(`desktop smoke: ${failures.length} failure(s)`)
+  for (const f of failures) {
+    console.error(` - ${f}`)
+  }
+  process.exit(1)
+}
+
+console.log('desktop smoke: ok')

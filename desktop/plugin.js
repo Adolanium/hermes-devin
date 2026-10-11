@@ -22,6 +22,7 @@ import {
   Codicon,
   GlyphSpinner,
   host,
+  MessageTextContent,
   PALETTE_AREA,
   queryClient,
   ROUTES_AREA,
@@ -131,6 +132,28 @@ function shortPath(path, cwd) {
   }
 
   return baseName(p)
+}
+
+function ago(ts, now) {
+  if (!ts) {
+    return ''
+  }
+
+  const s = Math.max(0, Math.round(now / 1000 - ts))
+
+  if (s < 60) {
+    return 'just now'
+  }
+
+  if (s < 3600) {
+    return `${Math.floor(s / 60)} min ago`
+  }
+
+  if (s < 86400) {
+    return `${Math.floor(s / 3600)} h ago`
+  }
+
+  return `${Math.floor(s / 86400)} d ago`
 }
 
 function elapsed(run, now) {
@@ -579,14 +602,13 @@ function RunCard({ runId, ctx, compact = false }) {
       !compact && !live && data.output
         ? jsx('div', {
             style: {
-              ...S.muted,
-              whiteSpace: 'pre-wrap',
               borderLeft: '2px solid var(--ui-stroke-secondary)',
-              paddingLeft: 9,
-              maxHeight: 140,
-              overflow: 'auto'
+              paddingLeft: 11,
+              maxHeight: 260,
+              overflow: 'auto',
+              color: 'var(--ui-text-secondary)'
             },
-            children: String(data.output).trim().slice(0, 1200)
+            children: jsx(MessageTextContent, { text: String(data.output).trim().slice(0, 4000), media: false })
           })
         : null,
       // footer
@@ -630,10 +652,93 @@ function RunCard({ runId, ctx, compact = false }) {
 
 // --- the page --------------------------------------------------------------------
 
+function Stat({ label, value, tone }) {
+  return jsxs('div', {
+    style: {
+      flex: '1 1 0',
+      minWidth: 110,
+      padding: '10px 12px',
+      borderRadius: 9,
+      border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 45%, transparent)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2
+    },
+    children: [
+      jsx('span', { style: { fontSize: 20, fontWeight: 650, color: tone || 'var(--ui-text-primary)' }, children: value }),
+      jsx('span', { style: S.label, children: label })
+    ]
+  })
+}
+
+function HistoryRow({ run, now, onOpen }) {
+  const state = STATE[run.state] || { label: run.state, color: 'var(--ui-text-quaternary)' }
+  const changed = run.files_changed || []
+  const detail = run.error
+    ? `${run.error.code}: ${run.error.message}`
+    : changed.length
+      ? changed.slice(0, 4).map(f => shortPath(f, run.cwd)).join(', ') + (changed.length > 4 ? ` +${changed.length - 4}` : '')
+      : run.last_activity || ''
+
+  return jsxs('button', {
+    type: 'button',
+    className: 'devin-row',
+    onClick: onOpen,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '14px 1fr auto',
+      columnGap: 10,
+      rowGap: 2,
+      alignItems: 'center',
+      width: '100%',
+      padding: '9px 10px',
+      borderRadius: 8,
+      border: 'none',
+      background: 'transparent',
+      color: 'var(--ui-text-primary)',
+      cursor: 'pointer',
+      textAlign: 'left',
+      font: 'inherit'
+    },
+    children: [
+      jsx('span', { style: { width: 8, height: 8, borderRadius: 999, background: state.color, justifySelf: 'center' } }),
+      jsx('span', {
+        style: { fontWeight: 550, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+        children: run.title
+      }),
+      jsxs('span', {
+        style: { ...S.faint, ...S.row, fontSize: 12, justifySelf: 'end' },
+        children: [
+          jsx('span', { children: baseName(run.cwd) }),
+          jsx('span', { style: S.mono, children: elapsed(run, now) }),
+          jsx('span', { style: { color: state.color }, children: state.label }),
+          jsx('span', { children: ago(run.finished_at || run.created_at, now) })
+        ]
+      }),
+      jsx('span', {}),
+      detail
+        ? jsx('span', {
+            style: {
+              gridColumn: '2 / 4',
+              fontSize: 12,
+              color: run.error ? 'color-mix(in srgb, var(--ui-red) 80%, var(--ui-text-tertiary))' : 'var(--ui-text-tertiary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              ...(run.error ? {} : S.mono)
+            },
+            children: detail
+          })
+        : null
+    ]
+  })
+}
+
 function DevinPage({ ctx }) {
   const runs = useValue($runs)
   const backend = useValue($backend)
   const [open, setOpen] = useState(null)
+  const now = useNow(true)
 
   useEffect(() => {
     void refreshRuns()
@@ -642,36 +747,61 @@ function DevinPage({ ctx }) {
   const all = Object.values(runs).sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
   const active = all.filter(isActive)
   const finished = all.filter(r => !isActive(r))
+  const succeeded = finished.filter(r => r.state === 'succeeded').length
+  const filesTouched = new Set(all.flatMap(r => r.files_changed || [])).size
 
-  const section = (title, children) =>
+  const section = (title, children, extra) =>
     jsxs('section', {
       style: { display: 'flex', flexDirection: 'column', gap: 10 },
-      children: [jsx('div', { style: S.label, children: title }), children]
+      children: [
+        jsxs('div', {
+          style: { ...S.row, justifyContent: 'space-between' },
+          children: [jsx('div', { style: S.label, children: title }), extra || null]
+        }),
+        children
+      ]
     })
 
   return jsx('div', {
     style: { height: '100%', overflow: 'auto' },
     children: jsxs('div', {
-      style: { maxWidth: 820, margin: '0 auto', padding: '28px 24px 48px', display: 'flex', flexDirection: 'column', gap: 26 },
+      style: { maxWidth: 1040, margin: '0 auto', padding: '28px 28px 56px', display: 'flex', flexDirection: 'column', gap: 26 },
       children: [
         jsxs('header', {
-          style: { display: 'flex', flexDirection: 'column', gap: 6 },
+          style: { display: 'flex', flexDirection: 'column', gap: 14 },
           children: [
             jsxs('div', {
-              style: { ...S.row, gap: 10 },
+              style: { display: 'flex', flexDirection: 'column', gap: 6 },
               children: [
-                jsx(Codicon, { name: 'hubot', style: { fontSize: 22, color: 'var(--ui-accent)' } }),
-                jsx('h1', { style: { fontSize: 20, fontWeight: 650, margin: 0 }, children: 'Devin' }),
-                active.length
-                  ? jsx('span', { style: S.pill('var(--ui-accent)'), children: `${active.length} working` })
-                  : null
+                jsxs('div', {
+                  style: { ...S.row, gap: 10 },
+                  children: [
+                    jsx(Codicon, { name: 'hubot', style: { fontSize: 22, color: 'var(--ui-accent)' } }),
+                    jsx('h1', { style: { fontSize: 20, fontWeight: 650, margin: 0 }, children: 'Devin' }),
+                    active.length ? jsx('span', { style: S.pill('var(--ui-accent)'), children: `${active.length} working` }) : null
+                  ]
+                }),
+                jsx('p', {
+                  style: { ...S.muted, margin: 0 },
+                  children: 'Coding tasks Hermes hands to the Devin CLI on this machine. Every run waits for your approval.'
+                })
               ]
             }),
-            jsx('p', {
-              style: { ...S.muted, margin: 0 },
-              children:
-                'Coding tasks Hermes handed to the Devin CLI. Ask Hermes to "have Devin…" to start one; every run waits for your approval.'
-            })
+            all.length
+              ? jsxs('div', {
+                  style: { display: 'flex', flexWrap: 'wrap', gap: 10 },
+                  children: [
+                    jsx(Stat, { label: 'Working now', value: active.length, tone: active.length ? 'var(--ui-accent)' : undefined }),
+                    jsx(Stat, { label: 'Finished', value: finished.length }),
+                    jsx(Stat, {
+                      label: 'Succeeded',
+                      value: finished.length ? `${Math.round((100 * succeeded) / finished.length)}%` : '–',
+                      tone: 'var(--ui-green)'
+                    }),
+                    jsx(Stat, { label: 'Files changed', value: filesTouched })
+                  ]
+                })
+              : null
           ]
         }),
         backend === 'off'
@@ -688,70 +818,38 @@ function DevinPage({ ctx }) {
                 style: { display: 'flex', flexDirection: 'column', gap: 12 },
                 children: active.map(r => jsx(RunCard, { runId: r.id, ctx }, r.id))
               })
-            : jsx('div', { style: S.faint, children: 'Nothing running right now.' })
+            : jsxs('div', {
+                style: {
+                  border: '1px dashed color-mix(in srgb, var(--ui-stroke-secondary) 60%, transparent)',
+                  borderRadius: 10,
+                  padding: '18px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                },
+                children: [
+                  jsx('span', { style: { color: 'var(--ui-text-secondary)' }, children: 'Nothing running right now.' }),
+                  jsx('span', {
+                    style: S.faint,
+                    children:
+                      'Ask Hermes in any chat, for example: "Have Devin add type hints to src/utils.py in my project and run the tests."'
+                  })
+                ]
+              })
         ),
         section(
           'History',
           finished.length
             ? jsx('div', {
                 style: { display: 'flex', flexDirection: 'column', gap: 2 },
-                children: finished.slice(0, 40).map(r =>
+                children: finished.slice(0, 50).map(r =>
                   open === r.id
                     ? jsx('div', { style: { padding: '6px 0' }, children: jsx(RunCard, { runId: r.id, ctx }) }, r.id)
-                    : jsxs(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'devin-row',
-                          onClick: () => setOpen(r.id),
-                          style: {
-                            ...S.row,
-                            justifyContent: 'space-between',
-                            width: '100%',
-                            padding: '8px 10px',
-                            borderRadius: 7,
-                            border: 'none',
-                            background: 'transparent',
-                            color: 'var(--ui-text-primary)',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            font: 'inherit'
-                          },
-                          children: [
-                            jsxs('span', {
-                              style: { ...S.row, minWidth: 0 },
-                              children: [
-                                jsx('span', {
-                                  style: {
-                                    width: 7,
-                                    height: 7,
-                                    borderRadius: 999,
-                                    flex: 'none',
-                                    background: (STATE[r.state] || {}).color || 'var(--ui-text-quaternary)'
-                                  }
-                                }),
-                                jsx('span', {
-                                  style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-                                  children: r.title
-                                })
-                              ]
-                            }),
-                            jsxs('span', {
-                              style: { ...S.faint, ...S.row, flex: 'none', fontSize: 12 },
-                              children: [
-                                (r.files_changed || []).length ? `${r.files_changed.length} files` : null,
-                                jsx('span', { children: baseName(r.cwd) }),
-                                jsx('span', { style: S.mono, children: elapsed(r, Date.now()) }),
-                                jsx('span', { children: (STATE[r.state] || {}).label || r.state })
-                              ]
-                            })
-                          ]
-                        },
-                        r.id
-                      )
+                    : jsx(HistoryRow, { run: r, now, onOpen: () => setOpen(r.id) }, r.id)
                 )
               })
-            : jsx('div', { style: S.faint, children: 'No finished runs yet.' })
+            : jsx('div', { style: S.faint, children: 'No finished runs yet.' }),
+          open ? jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => setOpen(null), children: 'Collapse' }) : null
         )
       ]
     })

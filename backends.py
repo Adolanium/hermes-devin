@@ -193,7 +193,8 @@ class AcpBackend:
     def __init__(self) -> None:
         self._session_id = ""
         self._peer: JsonRpcPeer | None = None
-        self._agent_text_since_tool = False
+        # Set by tool activity: Devin's next message text starts a new paragraph.
+        self._paragraph_break = False
 
     # -- argv / env -----------------------------------------------------------
 
@@ -216,6 +217,9 @@ class AcpBackend:
         if kind == "agent_message_chunk":
             text = _text_of(update.get("content"))
             if text:
+                if self._paragraph_break and run.output.value().strip():
+                    text = "\n\n" + text.lstrip("\n")
+                self._paragraph_break = False
                 io.append_output(text)
                 io.emit("message", text)
         elif kind == "agent_thought_chunk":
@@ -223,6 +227,7 @@ class AcpBackend:
             if text:
                 io.emit("thought", text)
         elif kind == "tool_call":
+            self._paragraph_break = True
             call_id = str(update.get("toolCallId") or "")
             info = {
                 "title": str(update.get("title") or ""), "kind": str(update.get("kind") or "other"),
