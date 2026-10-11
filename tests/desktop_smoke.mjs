@@ -155,7 +155,7 @@ const ctx = {
   rest: async (p, opts) => {
     restCalls.push([p, opts])
     if (p === '/brand/devin') {
-      return { svg: '<svg viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>' }
+      throw new Error('Devin Desktop is not installed')
     }
     if (p.startsWith('/runs?')) {
       return { runs: [running, failed, done, followUp], live: true }
@@ -174,6 +174,8 @@ const ctx = {
 }
 
 plugin.register(ctx)
+const initialPage = renderToStaticMarkup(state.contributions.find(c => c.area === 'routes').render())
+check('the mark renders before REST settles', initialPage.includes('mask-image'))
 await new Promise(r => setTimeout(r, 20))
 
 const byArea = area => state.contributions.filter(c => c.area === area)
@@ -215,6 +217,10 @@ check('the follow-up box sits only on the newest run of a thread', (thread.match
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)
 const page = render('page', byArea('routes')[0].render(), ['Devin <span', 'Hermes', 'nous-girl-dark.png', 'mask-image', '1 working', 'Add type hints', 'Run the tests', 'permission_denied', 'Create hello.txt'])
+check('the mark does not need an installed app', !restCalls.some(([p]) => p === '/brand/devin'))
+check('the mark is not the generic robot fallback', !page.includes('data-icon="hubot"'))
+const mark = page.match(/data:image\/svg\+xml;charset=utf-8,([^&]+)/)
+check('the bundled SVG contains the official mark', mark && decodeURIComponent(mark[1]).includes('M70 159.333'))
 check('follow-ups are not listed as separate history rows', !page.includes('Follow-up: also add tests'))
 render('review tab', React.createElement(pluginModule.__testing.ReviewPane, { runId: running.id, ctx }),
   ['Add type hints', 'utils.py', '+def add(a: int, b: int) -&gt; int:', 'Show in folder'])
