@@ -55,6 +55,8 @@ def test_cloud_selection_needs_hermes_approval_and_has_separate_defaults(harness
     assert child_result["ok"], child_result
     child = h.manager.get(child_result["run"]["id"])
     assert child.settled.wait(20)
+    assert child.state.value == "succeeded", child.error
+    assert "model" not in child.session_config
     assert child.execution_target == "cloud" and child.remote_state == "idle"
     assert child.devin_session_id == run.devin_session_id
     assert "REPLAYED" not in child.output.value()

@@ -149,7 +149,7 @@ class Agent:
                     "id": key,
                     "name": key,
                     "type": "select",
-                    "category": "other",
+                    "category": "model" if key == "devin_version" else "other",
                     "currentValue": self.config_values[key],
                     "options": [{"value": value, "name": name} for value, name in choices],
                     "_meta": {"signedUrl": "https://private.invalid/?token=private"},

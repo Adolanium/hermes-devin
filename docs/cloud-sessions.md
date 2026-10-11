@@ -63,6 +63,15 @@ no implicit Local-to-Cloud handoff or Cloud-to-Local pickup.
 ## Validation scope
 
 Automated tests use a fake ACP server for launching, follow-ups, configuration changes,
-confirmed cancellation and relay failure. Real authenticated CLI discovery has verified
-the target-specific menus without sending an inference prompt. Real paid Cloud execution
-and cancellation still require a separately approved live test.
+confirmed cancellation and relay failure, including Cloud model presets advertised with
+ACP's `model` category. Cloud presets use `devin_version`; a resumed Cloud session must
+not acquire the Local `model` setting.
+
+Real authenticated Desktop tests verified the target-specific menus, consent gating and
+profile isolation. A separately approved test launched one Lite Cloud task with no
+repository, Agent persona, Ubuntu and a 120-second plugin timeout. Desktop Stop received
+the original prompt's cancellation confirmation, and the local relay exited.
+
+Cloud follow-ups and reconnect have not been live-tested. Other Cloud presets and
+platforms were discovered, not executed. Billing was not tested; the plugin timeout
+is not a billing cap.

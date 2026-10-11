@@ -664,7 +664,7 @@ class AcpBackend:
                 io.run.devin_session_id = self._session_id
             self._config_ready = False
             values = dict(getattr(io, "session_options", {}))
-            if io.model and model_options(session.get("configOptions")):
+            if not cloud and io.model and model_options(session.get("configOptions")):
                 values.setdefault("model", io.model)
             self._selected_values = values
             options = apply_options(
