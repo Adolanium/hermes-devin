@@ -955,7 +955,7 @@ function FollowUps({ children, ctx, wide }) {
 function useRunDetail(runId, active) {
   const owner = useValue($owner)
   return useQuery({
-    queryKey: [ID, 'run', runId, owner],
+    queryKey: [ID, 'run', runId, owner, active ? 'live' : 'output'],
     enabled: Boolean(rest) && RUN_ID.test(runId || ''),
     queryFn: () => rest(`/runs/${runId}${active ? '' : '?output=true'}`),
     refetchInterval: active ? 2500 : false,

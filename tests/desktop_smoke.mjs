@@ -98,7 +98,17 @@ export const useTheme = () => ({ renderedMode: 'dark' })
 export function useValue(store) {
   return React.useSyncExternalStore(store.listen, store.get, store.get)
 }
-export function useQuery({ queryKey, enabled }) {
+export function useQuery({ queryKey, enabled, queryFn }) {
+  const cache = globalThis.__devinSmoke.queryCache
+  if (cache && enabled !== false) {
+    const key = JSON.stringify(queryKey)
+    if (!cache.has(key)) {
+      const entry = { data: undefined, isError: false }
+      cache.set(key, entry)
+      queryFn().then(data => { entry.data = data })
+    }
+    return cache.get(key)
+  }
   return { data: enabled === false ? undefined : details[queryKey[2]], isError: false }
 }
 export const queryClient = { invalidateQueries: () => Promise.resolve() }
@@ -181,7 +191,10 @@ const ctx = {
       if (state.response) return state.response()
       return { runs: [running, failed, done, followUp], live: true, profile_scope: 'default-scope' }
     }
-    return details[p.split('/')[2]?.split('?')[0]] || {}
+    const detail = details[p.split('/')[2]?.split('?')[0]] || {}
+    if (p.includes('?output=true')) return detail
+    const { output, ...withoutOutput } = detail
+    return withoutOutput
   },
   register: c => (state.contributions.push(c), () => {}),
   registerMany: cs => (state.contributions.push(...cs), () => {}),
@@ -264,6 +277,25 @@ for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
   fn({ type: 'plugin.devin.run.finished', payload })
 }
 check('finish announces once on the pet', state.notices.filter(n => n.pet && n.pet.startsWith('Devin finished')).length === 1, JSON.stringify(state.notices))
+
+state.queryCache = new Map()
+renderToStaticMarkup(directive.render({ attrs: { id: running.id } }))
+await new Promise(r => setTimeout(r, 0))
+renderToStaticMarkup(directive.render({ attrs: { id: running.id } }))
+const completed = { ...running, state: 'succeeded', finished_at: now, pending_permissions: [] }
+const originalDetail = details[running.id]
+details[running.id] = { ...originalDetail, ...completed, output: 'FINISHED_RESULT_WITHOUT_RELOAD' }
+const callsBeforeFinish = restCalls.length
+for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
+  fn({ payload: { type: 'run.finished', run_id: running.id, run: completed, profile_scope: 'default-scope' } })
+}
+renderToStaticMarkup(directive.render({ attrs: { id: running.id } }))
+await new Promise(r => setTimeout(r, 0))
+const completedHtml = renderToStaticMarkup(directive.render({ attrs: { id: running.id } }))
+check('finishing a mounted card fetches its persisted output', restCalls.slice(callsBeforeFinish).some(([p]) => p === `/runs/${running.id}?output=true`))
+check('finished result appears without reloading', completedHtml.includes('FINISHED_RESULT_WITHOUT_RELOAD'))
+state.queryCache = null
+details[running.id] = originalDetail
 
 state.response = () => ({ runs: [], profile_scope: 'second-scope' })
 sdkHost.state.profile.set('second')
