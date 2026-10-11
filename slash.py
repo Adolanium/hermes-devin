@@ -10,9 +10,11 @@ from .runner import RunRefused
 if TYPE_CHECKING:  # pragma: no cover
     from .core import DevinPlugin
 
-USAGE = ("/devin [list | status <run_id> | cancel <run_id|all> | doctor]\n"
-         "  list    recent runs\n  status  one run's state and recent events\n"
-         "  cancel  stop a run and every process it started\n  doctor  check settings, CLI and login")
+USAGE = (
+    "/devin [list | status <run_id> | cancel <run_id|all> | doctor]\n"
+    "  list    recent runs\n  status  one run's state and recent events\n"
+    "  cancel  stop a run and every process it started\n  doctor  check settings, CLI and login"
+)
 
 
 def _fmt_row(row: dict) -> str:
@@ -66,8 +68,10 @@ def doctor(plugin: DevinPlugin) -> str:
     cfg, err = plugin.config.try_load()
     if cfg is None:
         return f"settings: INVALID - {err}"
-    lines.append(f"settings: ok (backend={cfg.backend}, permission_mode={cfg.permission_mode}, "
-                 f"max_concurrent_runs={cfg.max_concurrent_runs})")
+    lines.append(
+        f"settings: ok (backend={cfg.backend}, permission_mode={cfg.permission_mode}, "
+        f"max_concurrent_runs={cfg.max_concurrent_runs})"
+    )
     try:
         argv = plugin.manager.resolve_cli(cfg)
     except RunRefused as exc:

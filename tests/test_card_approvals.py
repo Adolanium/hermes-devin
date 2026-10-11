@@ -48,8 +48,11 @@ def _start_background(h):
 def test_background_desktop_run_asks_on_the_card(harness, monkeypatch, identity):
     if identity == "source_context":
         monkeypatch.setenv("HERMES_SESSION_SOURCE", "cli")
-        monkeypatch.setitem(sys.modules, "gateway.session_context", SimpleNamespace(
-            get_session_env=lambda name: {"HERMES_SESSION_SOURCE": "desktop"}.get(name, "")))
+        monkeypatch.setitem(
+            sys.modules,
+            "gateway.session_context",
+            SimpleNamespace(get_session_env=lambda name: {"HERMES_SESSION_SOURCE": "desktop"}.get(name, "")),
+        )
     else:
         name = "HERMES_SESSION_PLATFORM" if identity == "platform_env" else "HERMES_SESSION_SOURCE"
         monkeypatch.setenv(name, "desktop")
@@ -76,7 +79,8 @@ def test_background_desktop_run_asks_on_the_card(harness, monkeypatch, identity)
     assert "permission outcome: selected:yes" in out and "edit outcome: n" in out
     assert [(p.decision, p.reason) for p in run.permissions] == [
         ("allowed", "allowed on the run card in Hermes Desktop"),
-        ("denied", "denied on the run card in Hermes Desktop")]
+        ("denied", "denied on the run card in Hermes Desktop"),
+    ]
     assert run.pending_permissions == {}
     assert len(h.rec.gate_calls) == 1  # only the run approval
 
@@ -111,8 +115,11 @@ def test_cancel_releases_a_waiting_card_request(harness, monkeypatch):
 @pytest.mark.parametrize("source", ["", "cli", "tui", "telegram"])
 def test_background_outside_desktop_still_denies(harness, monkeypatch, source):
     monkeypatch.setenv("HERMES_SESSION_SOURCE", "desktop")
-    monkeypatch.setitem(sys.modules, "gateway.session_context", SimpleNamespace(
-        get_session_env=lambda name: {"HERMES_SESSION_SOURCE": source}.get(name, "")))
+    monkeypatch.setitem(
+        sys.modules,
+        "gateway.session_context",
+        SimpleNamespace(get_session_env=lambda name: {"HERMES_SESSION_SOURCE": source}.get(name, "")),
+    )
     h = harness(scenario="permission")
     run = _start_background(h)
     assert run.desktop is False

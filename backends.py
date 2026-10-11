@@ -49,8 +49,12 @@ _PRINT_REJECTED = re.compile(r"rejected a tool call that requires confirmation",
 
 # Devin permission modes as the CLI spells them, for DEVIN_PERMISSION_MODE / --permission-mode.
 CLI_PERMISSION_MODE = {
-    "plan": "normal", "normal": "normal", "accept-edits": "accept-edits", "smart": "smart",
-    "dangerous": "dangerous", "autonomous": "autonomous",
+    "plan": "normal",
+    "normal": "normal",
+    "accept-edits": "accept-edits",
+    "smart": "smart",
+    "dangerous": "dangerous",
+    "autonomous": "autonomous",
 }
 
 # Names that identify the matching ACP session mode advertised by the agent.
@@ -94,8 +98,7 @@ class RunIO(Protocol):
     def append_output(self, text: str) -> None: ...
     def mark_running(self) -> None: ...
     def ask_permission(self, title: str, kind: str, detail: dict) -> tuple[bool, str]: ...
-    def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *,
-                          request_id: str = "") -> None: ...
+    def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *, request_id: str = "") -> None: ...
     def spawn(self, argv: list[str], *, stdin_pipe: bool) -> Any: ...
     def cancel_reason(self) -> str: ...
 
@@ -119,7 +122,7 @@ class _StderrTail:
                 chunk = reader(4096)
                 if not chunk:
                     break
-                self.text = (self.text + chunk.decode("utf-8", errors="replace"))[-self._limit:]
+                self.text = (self.text + chunk.decode("utf-8", errors="replace"))[-self._limit :]
         except (OSError, ValueError):
             pass
 
@@ -142,13 +145,23 @@ def _wait_or_stop(io: RunIO, done: Callable[[], bool], *, poll: float = 0.1) -> 
 
 def _finish_stopped(io: RunIO, why: str, kill: dict[str, Any], stderr: str) -> Outcome:
     if why == "timeout":
-        return Outcome(RunState.TIMED_OUT, error=RunError(
-            ErrorCode.TIMEOUT.value, f"Devin did not finish within {io.run.timeout_seconds}s and was stopped",
-            stderr_tail=stderr[-2000:]), kill_report=kill)
+        return Outcome(
+            RunState.TIMED_OUT,
+            error=RunError(
+                ErrorCode.TIMEOUT.value,
+                f"Devin did not finish within {io.run.timeout_seconds}s and was stopped",
+                stderr_tail=stderr[-2000:],
+            ),
+            kill_report=kill,
+        )
     reason = io.cancel_reason() or "cancelled"
     code = ErrorCode.INTERRUPTED if reason.startswith("interrupt") else ErrorCode.CANCELLED
-    return Outcome(RunState.CANCELLED, stop_reason="cancelled",
-                   error=RunError(code.value, f"Run stopped: {reason}"), kill_report=kill)
+    return Outcome(
+        RunState.CANCELLED,
+        stop_reason="cancelled",
+        error=RunError(code.value, f"Run stopped: {reason}"),
+        kill_report=kill,
+    )
 
 
 # --- ACP ----------------------------------------------------------------------
@@ -170,8 +183,11 @@ def _merge_paths(paths: list[str], update: dict) -> list[str]:
     """Add the file paths a tool call touches: its ``locations`` and the
     ``path`` of any ``diff`` content (Devin reports edits only that way)."""
     found = [loc.get("path") for loc in update.get("locations") or [] if isinstance(loc, dict)]
-    found += [item.get("path") for item in update.get("content") or []
-              if isinstance(item, dict) and item.get("type") == "diff"]
+    found += [
+        item.get("path")
+        for item in update.get("content") or []
+        if isinstance(item, dict) and item.get("type") == "diff"
+    ]
     merged = list(paths)
     for path in found:
         if isinstance(path, str) and path and path not in merged:
@@ -186,13 +202,13 @@ _COMMAND_OUTPUT_CHARS = 4000
 def unified_diff(path: str, old: str, new: str) -> dict[str, Any]:
     """A compact unified diff of one edit, capped at ``_DIFF_MAX_LINES`` lines."""
     name = os.path.basename(path) or path
-    lines = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{name}", f"b/{name}",
-                                      n=2, lineterm=""))[2:]
+    lines = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{name}", f"b/{name}", n=2, lineterm=""))[
+        2:
+    ]
     added = sum(1 for line in lines if line.startswith("+"))
     removed = sum(1 for line in lines if line.startswith("-"))
     truncated = len(lines) > _DIFF_MAX_LINES
-    return {"patch": "\n".join(lines[:_DIFF_MAX_LINES]), "added": added, "removed": removed,
-            "truncated": truncated}
+    return {"patch": "\n".join(lines[:_DIFF_MAX_LINES]), "added": added, "removed": removed, "truncated": truncated}
 
 
 def _pick_option(options: list[dict], allow: bool) -> str | None:
@@ -251,7 +267,8 @@ class AcpBackend:
             self._paragraph_break = True
             call_id = str(update.get("toolCallId") or "")
             info = {
-                "title": str(update.get("title") or ""), "kind": str(update.get("kind") or "other"),
+                "title": str(update.get("title") or ""),
+                "kind": str(update.get("kind") or "other"),
                 "status": str(update.get("status") or "pending"),
                 "locations": _merge_paths([], update),
             }
@@ -260,14 +277,21 @@ class AcpBackend:
                 info["command"] = raw["command"][:2000]
             with run._lock:
                 run.tool_calls[call_id] = info
-            io.emit("tool_call", info["title"], tool_call_id=call_id, tool_kind=info["kind"],
-                    status=info["status"], locations=info["locations"] or None)
+            io.emit(
+                "tool_call",
+                info["title"],
+                tool_call_id=call_id,
+                tool_kind=info["kind"],
+                status=info["status"],
+                locations=info["locations"] or None,
+            )
             self._capture_content(io, call_id, info, update)
         elif kind == "tool_call_update":
             call_id = str(update.get("toolCallId") or "")
             with run._lock:
-                info = run.tool_calls.setdefault(call_id, {"title": "", "kind": "other", "status": "pending",
-                                                           "locations": []})
+                info = run.tool_calls.setdefault(
+                    call_id, {"title": "", "kind": "other", "status": "pending", "locations": []}
+                )
                 for key in ("title", "kind", "status"):
                     if update.get(key):
                         info[key] = str(update[key])
@@ -277,9 +301,13 @@ class AcpBackend:
                 io.emit("tool_update", info.get("title", ""), tool_call_id=call_id, status=update.get("status"))
         elif kind == "plan":
             entries = [
-                {"content": str(e.get("content") or ""), "status": str(e.get("status") or ""),
-                 "priority": str(e.get("priority") or "")}
-                for e in update.get("entries") or [] if isinstance(e, dict)
+                {
+                    "content": str(e.get("content") or ""),
+                    "status": str(e.get("status") or ""),
+                    "priority": str(e.get("priority") or ""),
+                }
+                for e in update.get("entries") or []
+                if isinstance(e, dict)
             ][:100]
             with run._lock:
                 run.plan = entries
@@ -315,8 +343,9 @@ class AcpBackend:
         self._replaying = True
         try:
             try:
-                session = peer.request("session/load", {"sessionId": session_id, "cwd": io.run.cwd,
-                                                        "mcpServers": []}, timeout=timeout)
+                session = peer.request(
+                    "session/load", {"sessionId": session_id, "cwd": io.run.cwd, "mcpServers": []}, timeout=timeout
+                )
             except RpcError as exc:
                 raise RuntimeError(f"Devin could not resume session {session_id}: {exc.message}") from exc
             try:
@@ -344,8 +373,12 @@ class AcpBackend:
             if item.get("type") != "diff" or not isinstance(path, str) or not path or not isinstance(new, str):
                 continue
             old = item.get("oldText") if isinstance(item.get("oldText"), str) else ""
-            record = {"path": path, "tool_call_id": call_id, "new_file": item.get("oldText") is None,
-                      **unified_diff(path, old, new)}
+            record = {
+                "path": path,
+                "tool_call_id": call_id,
+                "new_file": item.get("oldText") is None,
+                **unified_diff(path, old, new),
+            }
             with run._lock:
                 previous = run.diffs.get(path)
                 if previous is not None and previous["patch"] == record["patch"]:
@@ -357,9 +390,13 @@ class AcpBackend:
 
         if info.get("kind") != "execute":
             return
-        texts = [_text_of(item.get("content")) for item in content
-                 if item.get("type") == "content" and isinstance(item.get("content"), dict)
-                 and item["content"].get("type") == "text"]
+        texts = [
+            _text_of(item.get("content"))
+            for item in content
+            if item.get("type") == "content"
+            and isinstance(item.get("content"), dict)
+            and item["content"].get("type") == "text"
+        ]
         meta = update.get("_meta") if isinstance(update.get("_meta"), dict) else {}
         exit_info = meta.get("terminal_exit") if isinstance(meta.get("terminal_exit"), dict) else {}
         status = update.get("status") if isinstance(update.get("status"), str) else ""
@@ -369,8 +406,13 @@ class AcpBackend:
             command = run.commands.get(call_id)
             created = command is None
             if created:
-                command = {"tool_call_id": call_id, "command": info.get("command") or info.get("title") or "",
-                           "output": "", "exit_code": None, "status": "running"}
+                command = {
+                    "tool_call_id": call_id,
+                    "command": info.get("command") or info.get("title") or "",
+                    "output": "",
+                    "exit_code": None,
+                    "status": "running",
+                }
                 run.commands[call_id] = command
                 while len(run.commands) > 10:
                     run.commands.pop(next(iter(run.commands)))
@@ -430,7 +472,8 @@ class AcpBackend:
             raise RuntimeError(
                 f"Devin offers no session mode matching permission_mode '{wanted}' over ACP "
                 f"(offered: {offered}); refusing to run in '{current or 'its default mode'}' instead. "
-                "Use backend 'print', which passes --permission-mode, or pick a mode Devin offers.")
+                "Use backend 'print', which passes --permission-mode, or pick a mode Devin offers."
+            )
         if match != current:
             peer.request("session/set_mode", {"sessionId": self._session_id, "modeId": match}, timeout=30)
         io.emit("mode", match)
@@ -441,7 +484,8 @@ class AcpBackend:
         tree = io.spawn(argv, stdin_pipe=True)
         stderr = _StderrTail(tree.proc.stderr)
         peer = JsonRpcPeer(
-            tree.proc.stdout, tree.proc.stdin,
+            tree.proc.stdout,
+            tree.proc.stdin,
             on_notification=lambda m, p: self._on_update(io, p) if m == "session/update" else None,
             on_request=lambda m, p: self._on_request(io, m, p),
             on_garbage=lambda line: io.emit("stderr", line[:500]),
@@ -467,40 +511,71 @@ class AcpBackend:
     def _setup_error(self, exc: BaseException, stderr: _StderrTail, tree: Any) -> Outcome:
         tail = stderr.join(1) if tree.wait(1.0) is not None else stderr.text
         text = f"{exc} {tail}"
-        if isinstance(exc, RpcError) and (exc.code == -32000 or looks_unauthenticated(exc.message)) \
-                or looks_unauthenticated(tail):
-            return Outcome(RunState.FAILED, error=RunError(
-                ErrorCode.NOT_LOGGED_IN.value,
-                "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try again.",
-                stderr_tail=tail[-2000:]))
+        if (
+            isinstance(exc, RpcError)
+            and (exc.code == -32000 or looks_unauthenticated(exc.message))
+            or looks_unauthenticated(tail)
+        ):
+            return Outcome(
+                RunState.FAILED,
+                error=RunError(
+                    ErrorCode.NOT_LOGGED_IN.value,
+                    "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try again.",
+                    stderr_tail=tail[-2000:],
+                ),
+            )
         if _TRUST_PATTERNS.search(text):
-            return Outcome(RunState.FAILED, error=RunError(
-                ErrorCode.WORKSPACE_UNTRUSTED.value,
-                "Devin refused the working directory because it is not trusted. Trust it in Devin, "
-                "or set trust_workspace: true in the plugin settings.", stderr_tail=tail[-2000:]))
+            return Outcome(
+                RunState.FAILED,
+                error=RunError(
+                    ErrorCode.WORKSPACE_UNTRUSTED.value,
+                    "Devin refused the working directory because it is not trusted. Trust it in Devin, "
+                    "or set trust_workspace: true in the plugin settings.",
+                    stderr_tail=tail[-2000:],
+                ),
+            )
         exit_code = tree.poll()
         if exit_code is not None:
-            return Outcome(RunState.FAILED, exit_code=exit_code, error=RunError(
-                ErrorCode.EXIT_NONZERO.value, f"devin acp exited with code {exit_code} during startup",
-                exit_code=exit_code, stderr_tail=tail[-2000:]))
-        return Outcome(RunState.FAILED, error=RunError(
-            ErrorCode.PROTOCOL.value, f"ACP handshake with Devin failed: {exc}", stderr_tail=tail[-2000:]))
+            return Outcome(
+                RunState.FAILED,
+                exit_code=exit_code,
+                error=RunError(
+                    ErrorCode.EXIT_NONZERO.value,
+                    f"devin acp exited with code {exit_code} during startup",
+                    exit_code=exit_code,
+                    stderr_tail=tail[-2000:],
+                ),
+            )
+        return Outcome(
+            RunState.FAILED,
+            error=RunError(
+                ErrorCode.PROTOCOL.value, f"ACP handshake with Devin failed: {exc}", stderr_tail=tail[-2000:]
+            ),
+        )
 
     def _drive(self, io: RunIO, tree: Any, peer: JsonRpcPeer, stderr: _StderrTail) -> Outcome:
         def budget() -> float:
             return max(1.0, min(120.0, io.deadline - time.monotonic()))
 
         try:
-            init = peer.request("initialize", {
-                "protocolVersion": ACP_PROTOCOL_VERSION,
-                "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False},
-                "clientInfo": CLIENT_INFO,
-            }, timeout=budget())
+            init = peer.request(
+                "initialize",
+                {
+                    "protocolVersion": ACP_PROTOCOL_VERSION,
+                    "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False},
+                    "clientInfo": CLIENT_INFO,
+                },
+                timeout=budget(),
+            )
             if isinstance(init, dict):
                 agent = init.get("agentInfo") or {}
-                io.emit("status", "connected", protocol_version=init.get("protocolVersion"),
-                        agent=agent.get("name") if isinstance(agent, dict) else None,
-                        agent_version=agent.get("version") if isinstance(agent, dict) else None)
+                io.emit(
+                    "status",
+                    "connected",
+                    protocol_version=init.get("protocolVersion"),
+                    agent=agent.get("name") if isinstance(agent, dict) else None,
+                    agent_version=agent.get("version") if isinstance(agent, dict) else None,
+                )
             resume = io.run.resume_session_id
             if resume:
                 session = self._load_session(io, peer, resume, budget())
@@ -515,19 +590,24 @@ class AcpBackend:
         except (RpcError, PeerClosed, TimeoutError, RuntimeError) as exc:
             if io.cancel_event.is_set() or time.monotonic() >= io.deadline:
                 kill = tree.stop(grace=io.grace).to_dict()
-                return _finish_stopped(io, "timeout" if not io.cancel_event.is_set() else "cancelled",
-                                       kill, stderr.text)
+                return _finish_stopped(
+                    io, "timeout" if not io.cancel_event.is_set() else "cancelled", kill, stderr.text
+                )
             if isinstance(exc, RuntimeError) and not isinstance(exc, (RpcError, PeerClosed, TimeoutError)):
                 return Outcome(RunState.FAILED, error=RunError(ErrorCode.REFUSED.value, str(exc)))
             return self._setup_error(exc, stderr, tree)
 
         io.mark_running()
-        rid, pending = peer.request_async("session/prompt", {
-            "sessionId": self._session_id,
-            "prompt": [{"type": "text", "text": io.run.prompt}],
-        })
+        rid, pending = peer.request_async(
+            "session/prompt",
+            {
+                "sessionId": self._session_id,
+                "prompt": [{"type": "text", "text": io.run.prompt}],
+            },
+        )
         why = _wait_or_stop(io, pending.event.is_set)
         if why != "done":
+
             def soft() -> None:
                 # ACP's cancel: the agent ends the turn with stopReason "cancelled".
                 # Then end the connection (stdin EOF) so the agent process exits on
@@ -538,6 +618,7 @@ class AcpBackend:
                     tree.proc.stdin.close()
                 except Exception:
                     pass
+
             # Let the agent wind down its turn before the tree is killed.
             kill = tree.stop(grace=io.grace, soft_stop=soft if not peer.closed.is_set() else None).to_dict()
             return _finish_stopped(io, why, kill, stderr.text)
@@ -546,17 +627,31 @@ class AcpBackend:
             err = pending.error
             tail = stderr.join(1) if tree.wait(0.5) is not None else stderr.text
             if isinstance(err, RpcError) and (err.code == -32000 or looks_unauthenticated(err.message)):
-                return Outcome(RunState.FAILED, error=RunError(
-                    ErrorCode.NOT_LOGGED_IN.value,
-                    "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try again.",
-                    stderr_tail=tail[-2000:]))
+                return Outcome(
+                    RunState.FAILED,
+                    error=RunError(
+                        ErrorCode.NOT_LOGGED_IN.value,
+                        "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try again.",
+                        stderr_tail=tail[-2000:],
+                    ),
+                )
             exit_code = tree.poll()
             if isinstance(err, PeerClosed) and exit_code not in (None, 0):
-                return Outcome(RunState.FAILED, exit_code=exit_code, error=RunError(
-                    ErrorCode.EXIT_NONZERO.value, f"devin acp exited with code {exit_code}",
-                    exit_code=exit_code, stderr_tail=tail[-2000:]))
-            return Outcome(RunState.FAILED, exit_code=exit_code, error=RunError(
-                ErrorCode.PROTOCOL.value, f"Devin run failed: {err}", stderr_tail=tail[-2000:]))
+                return Outcome(
+                    RunState.FAILED,
+                    exit_code=exit_code,
+                    error=RunError(
+                        ErrorCode.EXIT_NONZERO.value,
+                        f"devin acp exited with code {exit_code}",
+                        exit_code=exit_code,
+                        stderr_tail=tail[-2000:],
+                    ),
+                )
+            return Outcome(
+                RunState.FAILED,
+                exit_code=exit_code,
+                error=RunError(ErrorCode.PROTOCOL.value, f"Devin run failed: {err}", stderr_tail=tail[-2000:]),
+            )
 
         result = pending.result if isinstance(pending.result, dict) else {}
         stop = str(result.get("stopReason") or "end_turn")
@@ -568,11 +663,17 @@ class AcpBackend:
                     io.run.usage.update({"tokens": clean})
                 io.emit("usage", "", tokens=clean)
         if stop == "cancelled":
-            return Outcome(RunState.CANCELLED, stop_reason=stop, error=RunError(
-                ErrorCode.CANCELLED.value, "Devin reported the turn as cancelled"))
+            return Outcome(
+                RunState.CANCELLED,
+                stop_reason=stop,
+                error=RunError(ErrorCode.CANCELLED.value, "Devin reported the turn as cancelled"),
+            )
         if stop == "refusal":
-            return Outcome(RunState.FAILED, stop_reason=stop, error=RunError(
-                ErrorCode.REFUSED.value, "Devin refused to continue this task"))
+            return Outcome(
+                RunState.FAILED,
+                stop_reason=stop,
+                error=RunError(ErrorCode.REFUSED.value, "Devin refused to continue this task"),
+            )
         return Outcome(RunState.SUCCEEDED, stop_reason=stop)
 
 
@@ -588,8 +689,13 @@ class PrintBackend:
     @staticmethod
     def build_argv(io: RunIO, prompt_file: str) -> list[str]:
         argv = list(io.argv)
-        argv += ["--print", "--prompt-file", prompt_file,
-                 "--permission-mode", CLI_PERMISSION_MODE[io.run.permission_mode]]
+        argv += [
+            "--print",
+            "--prompt-file",
+            prompt_file,
+            "--permission-mode",
+            CLI_PERMISSION_MODE[io.run.permission_mode],
+        ]
         if io.model:
             argv += ["--model", io.model]
         if io.sandbox:
@@ -653,19 +759,35 @@ class PrintBackend:
             return self._success_or_denied(io, tail)
         out_tail = io.run.output.value()[-2000:]
         if looks_unauthenticated(tail) or looks_unauthenticated(out_tail):
-            return Outcome(RunState.FAILED, exit_code=code, error=RunError(
-                ErrorCode.NOT_LOGGED_IN.value,
-                "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try again.",
-                exit_code=code, stderr_tail=tail[-2000:]))
+            return Outcome(
+                RunState.FAILED,
+                exit_code=code,
+                error=RunError(
+                    ErrorCode.NOT_LOGGED_IN.value,
+                    "Devin CLI is not logged in. Run 'devin auth login' in a terminal, then try again.",
+                    exit_code=code,
+                    stderr_tail=tail[-2000:],
+                ),
+            )
         if _TRUST_PATTERNS.search(tail) or _TRUST_PATTERNS.search(out_tail):
-            return Outcome(RunState.FAILED, exit_code=code, error=RunError(
-                ErrorCode.WORKSPACE_UNTRUSTED.value,
-                "Devin refused the working directory because it is not trusted. Trust it in Devin, "
-                "or set trust_workspace: true in the plugin settings.", exit_code=code,
-                stderr_tail=tail[-2000:]))
-        return Outcome(RunState.FAILED, exit_code=code, error=RunError(
-            ErrorCode.EXIT_NONZERO.value, f"devin exited with code {code}", exit_code=code,
-            stderr_tail=tail[-2000:]))
+            return Outcome(
+                RunState.FAILED,
+                exit_code=code,
+                error=RunError(
+                    ErrorCode.WORKSPACE_UNTRUSTED.value,
+                    "Devin refused the working directory because it is not trusted. Trust it in Devin, "
+                    "or set trust_workspace: true in the plugin settings.",
+                    exit_code=code,
+                    stderr_tail=tail[-2000:],
+                ),
+            )
+        return Outcome(
+            RunState.FAILED,
+            exit_code=code,
+            error=RunError(
+                ErrorCode.EXIT_NONZERO.value, f"devin exited with code {code}", exit_code=code, stderr_tail=tail[-2000:]
+            ),
+        )
 
     @staticmethod
     def _success_or_denied(io: RunIO, tail: str) -> Outcome:
@@ -675,15 +797,23 @@ class PrintBackend:
         rejected = len(_PRINT_REJECTED.findall(tail))
         mode = io.run.permission_mode
         for _ in range(rejected):
-            io.record_permission("an action that needed confirmation", "other", False,
-                                 f"print mode cannot ask; permission mode '{mode}'")
+            io.record_permission(
+                "an action that needed confirmation", "other", False, f"print mode cannot ask; permission mode '{mode}'"
+            )
         if rejected and not io.run.output.value().strip():
-            return Outcome(RunState.FAILED, stop_reason="exit", exit_code=0, error=RunError(
-                ErrorCode.PERMISSION_DENIED.value,
-                f"Devin stopped without an answer after {rejected} action(s) needed confirmation, "
-                f"which print mode cannot ask for. Permission mode '{mode}' does not allow them; "
-                "choose a wider mode such as accept-edits if Devin should act on its own.",
-                exit_code=0, stderr_tail=tail[-2000:]))
+            return Outcome(
+                RunState.FAILED,
+                stop_reason="exit",
+                exit_code=0,
+                error=RunError(
+                    ErrorCode.PERMISSION_DENIED.value,
+                    f"Devin stopped without an answer after {rejected} action(s) needed confirmation, "
+                    f"which print mode cannot ask for. Permission mode '{mode}' does not allow them; "
+                    "choose a wider mode such as accept-edits if Devin should act on its own.",
+                    exit_code=0,
+                    stderr_tail=tail[-2000:],
+                ),
+            )
         return Outcome(RunState.SUCCEEDED, stop_reason="exit", exit_code=0)
 
 

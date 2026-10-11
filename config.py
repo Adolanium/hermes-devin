@@ -128,8 +128,9 @@ def _str(raw: Mapping[str, Any], key: str, default: str) -> str:
     return value.strip()
 
 
-def _choice(raw: Mapping[str, Any], key: str, default: str, allowed: tuple[str, ...],
-            aliases: Mapping[str, str] | None = None) -> str:
+def _choice(
+    raw: Mapping[str, Any], key: str, default: str, allowed: tuple[str, ...], aliases: Mapping[str, str] | None = None
+) -> str:
     value = _str(raw, key, default).lower()
     value = (aliases or {}).get(value, value)
     if value not in allowed:

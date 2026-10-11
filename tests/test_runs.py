@@ -202,8 +202,15 @@ def test_refusal(harness):
 def test_timeout_stops_run(harness, backend):
     h = harness({"backend": backend}, scenario="hang")
     cfg = h.config.load()
-    run = h.manager.start(cfg, prompt="x", cwd=str(h.workdir), background=False, timeout_seconds=1, title="t",
-                          approval=models.ApprovalRecord("test", "k", "s", 0, 0))
+    run = h.manager.start(
+        cfg,
+        prompt="x",
+        cwd=str(h.workdir),
+        background=False,
+        timeout_seconds=1,
+        title="t",
+        approval=models.ApprovalRecord("test", "k", "s", 0, 0),
+    )
     assert run.settled.wait(30)
     assert run.state == models.RunState.TIMED_OUT
     assert run.error.code == "timeout"
@@ -307,8 +314,15 @@ def test_live_diffs_and_command_output(harness):
     assert calc["new_file"] is False and calc["added"] == 1 and calc["removed"] == 1
     assert "-def add(a, b):" in calc["patch"] and "+def add(a: int, b: int) -> int:" in calc["patch"]
     assert diffs["notes.md"]["new_file"] is True and diffs["notes.md"]["added"] == 1
-    assert snap["commands"] == [{"tool_call_id": "x1", "command": "pytest -q", "output": "line 0\nline 1\nline 2",
-                                 "exit_code": 1, "status": "completed"}]
+    assert snap["commands"] == [
+        {
+            "tool_call_id": "x1",
+            "command": "pytest -q",
+            "output": "line 0\nline 1\nline 2",
+            "exit_code": 1,
+            "status": "completed",
+        }
+    ]
     terminal = [e for e in snap["events"] if e["kind"] == "terminal"]
     assert len(terminal) == 1 and terminal[0]["data"]["exit_code"] == 1  # grows in place
     assert [e for e in snap["events"] if e["kind"] == "diff"][0]["text"] == "Edited calc.py (+1 -1)"

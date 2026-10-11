@@ -47,9 +47,14 @@ def _default_broadcast(plugin_id: str, event: str, payload: dict) -> None:
 
 
 class EventBus:
-    def __init__(self, *, plugin_id: str = "devin", emit: Callable[[str, dict], Any] | None = None,
-                 broadcast: Callable[[str, str, dict], None] | None = _default_broadcast,
-                 chatty_interval: float = 0.5):
+    def __init__(
+        self,
+        *,
+        plugin_id: str = "devin",
+        emit: Callable[[str, dict], Any] | None = None,
+        broadcast: Callable[[str, str, dict], None] | None = _default_broadcast,
+        chatty_interval: float = 0.5,
+    ):
         self.plugin_id = plugin_id
         self._emit = emit
         self._broadcast = broadcast

@@ -81,12 +81,21 @@ def test_deny_setting(harness):
     assert len(h.rec.gate_calls) == 1
 
 
-@pytest.mark.parametrize("mode, kind, expected", [
-    ("plan", "read", True), ("plan", "edit", False), ("plan", "execute", False),
-    ("normal", "edit", None), ("normal", "execute", None),
-    ("accept-edits", "edit", True), ("accept-edits", "execute", None),
-    ("smart", "delete", True), ("dangerous", "execute", True), ("dangerous", "other", True),
-])
+@pytest.mark.parametrize(
+    "mode, kind, expected",
+    [
+        ("plan", "read", True),
+        ("plan", "edit", False),
+        ("plan", "execute", False),
+        ("normal", "edit", None),
+        ("normal", "execute", None),
+        ("accept-edits", "edit", True),
+        ("accept-edits", "execute", None),
+        ("smart", "delete", True),
+        ("dangerous", "execute", True),
+        ("dangerous", "other", True),
+    ],
+)
 def test_permission_policy(mode, kind, expected):
     assert backends.permission_policy(mode, kind) is expected
 

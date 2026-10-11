@@ -63,9 +63,17 @@ class _WinJob:
         self._k = kernel32
 
         class IO_COUNTERS(ctypes.Structure):
-            _fields_ = [(name, ctypes.c_ulonglong) for name in (
-                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
-                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+            _fields_ = [
+                (name, ctypes.c_ulonglong)
+                for name in (
+                    "ReadOperationCount",
+                    "WriteOperationCount",
+                    "OtherOperationCount",
+                    "ReadTransferCount",
+                    "WriteTransferCount",
+                    "OtherTransferCount",
+                )
+            ]
 
         class BASIC(ctypes.Structure):
             _fields_ = [
@@ -108,8 +116,9 @@ class _WinJob:
             raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
         info = EXTENDED()
         info.BasicLimitInformation.LimitFlags = self.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if not kernel32.SetInformationJobObject(handle, self.JobObjectExtendedLimitInformation,
-                                                ctypes.byref(info), ctypes.sizeof(info)):
+        if not kernel32.SetInformationJobObject(
+            handle, self.JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
+        ):
             err = ctypes.get_last_error()
             kernel32.CloseHandle(handle)
             raise OSError(err, "SetInformationJobObject failed")
@@ -145,7 +154,9 @@ def _run_taskkill(pid: int) -> int:
     try:
         done = subprocess.run(
             ["taskkill", "/PID", str(pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return done.returncode
@@ -202,8 +213,12 @@ class KillReport:
     steps: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"method": self.method, "graceful": self.graceful, "exit_code": self.exit_code,
-                "steps": list(self.steps)}
+        return {
+            "method": self.method,
+            "graceful": self.graceful,
+            "exit_code": self.exit_code,
+            "steps": list(self.steps),
+        }
 
 
 class _PosixDescendants:
@@ -283,19 +298,29 @@ class _PosixDescendants:
 class ProcessTree:
     """A spawned CLI process plus whatever is needed to kill its descendants."""
 
-    def __init__(self, argv: Sequence[str], *, cwd: str, env: dict[str, str],
-                 stdin: Any = subprocess.DEVNULL, popen: Callable[..., subprocess.Popen] = subprocess.Popen):
+    def __init__(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: str,
+        env: dict[str, str],
+        stdin: Any = subprocess.DEVNULL,
+        popen: Callable[..., subprocess.Popen] = subprocess.Popen,
+    ):
         self.argv = list(argv)
         self.job: Any = None
         self.job_error: str = ""
         self._descendants: _PosixDescendants | None = None
         kwargs: dict[str, Any] = dict(
-            cwd=cwd, env=env, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=cwd,
+            env=env,
+            stdin=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             bufsize=-1,
         )
         if IS_WINDOWS:
-            kwargs["creationflags"] = (subprocess.CREATE_NEW_PROCESS_GROUP
-                                       | getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         else:
             kwargs["start_new_session"] = True
         self.proc = popen(self.argv, **kwargs)
@@ -307,8 +332,7 @@ class ProcessTree:
                 self.job = job
             except Exception as exc:  # fall back to taskkill /T
                 self.job_error = str(exc)
-                logger.warning("devin: Job Object unavailable for pid %s (%s); using taskkill fallback",
-                               self.pid, exc)
+                logger.warning("devin: Job Object unavailable for pid %s (%s); using taskkill fallback", self.pid, exc)
         else:
             self._descendants = _PosixDescendants(self.pid)
 

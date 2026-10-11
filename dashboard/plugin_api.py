@@ -31,10 +31,29 @@ from typing import Any
 
 _RUN_ID = re.compile(r"^dv-[0-9a-f]{6,32}$")
 _ACTIVE = {"created", "starting", "running", "cancelling"}
-_SUMMARY_KEYS = ("id", "title", "state", "background", "cwd", "permission_mode", "backend", "parent_run_id",
-                 "created_at", "started_at", "finished_at", "updated_at", "duration_seconds", "tool_calls",
-                 "files_changed", "permission_requests", "pending_permissions", "last_activity", "usage", "error",
-                 "schema_version")
+_SUMMARY_KEYS = (
+    "id",
+    "title",
+    "state",
+    "background",
+    "cwd",
+    "permission_mode",
+    "backend",
+    "parent_run_id",
+    "created_at",
+    "started_at",
+    "finished_at",
+    "updated_at",
+    "duration_seconds",
+    "tool_calls",
+    "files_changed",
+    "permission_requests",
+    "pending_permissions",
+    "last_activity",
+    "usage",
+    "error",
+    "schema_version",
+)
 _DETAIL_EVENTS = 60
 
 
@@ -68,8 +87,14 @@ def live_manager() -> Any | None:
     return plugin.manager if plugin is not None else None
 
 
-_FOLLOW_UP_STATUS = {"not_found": 404, "busy": 409, "not_resumable": 409, "concurrency_limit": 429,
-                     "invalid_arguments": 400, "invalid_settings": 409}
+_FOLLOW_UP_STATUS = {
+    "not_found": 404,
+    "busy": 409,
+    "not_resumable": 409,
+    "concurrency_limit": 429,
+    "invalid_arguments": 400,
+    "invalid_settings": 409,
+}
 
 
 def follow_up(run_id: str, prompt: Any, plugin: Any | None) -> tuple[int, dict[str, Any]]:
@@ -99,7 +124,9 @@ def _summary(data: dict[str, Any]) -> dict[str, Any]:
     return {k: data.get(k) for k in _SUMMARY_KEYS if k in data}
 
 
-def list_runs(root: Path | None, state: str = "all", limit: int = 50, manager: Any | None = None) -> list[dict[str, Any]]:
+def list_runs(
+    root: Path | None, state: str = "all", limit: int = 50, manager: Any | None = None
+) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     if root is not None and root.is_dir():
         for data in (_load(p) for p in root.glob("dv-*.json")):
@@ -114,11 +141,12 @@ def list_runs(root: Path | None, state: str = "all", limit: int = 50, manager: A
     elif state == "finished":
         out = [d for d in out if d.get("state") not in _ACTIVE]
     out.sort(key=lambda d: d.get("created_at") or 0, reverse=True)
-    return out[:max(1, min(limit, 200))]
+    return out[: max(1, min(limit, 200))]
 
 
-def get_run(root: Path | None, run_id: str, *, include_output: bool = False,
-            manager: Any | None = None) -> dict[str, Any] | None:
+def get_run(
+    root: Path | None, run_id: str, *, include_output: bool = False, manager: Any | None = None
+) -> dict[str, Any] | None:
     if not _RUN_ID.match(run_id or ""):
         return None
     run = manager.get(run_id) if manager is not None else None
@@ -143,8 +171,10 @@ def cancel_run(run_id: str, manager: Any | None) -> tuple[int, dict[str, Any]]:
         return 400, {"detail": "invalid run id"}
     run = manager.cancel(run_id, "cancelled from Hermes Desktop") if manager is not None else None
     if run is None:
-        return 409, {"detail": "This run is not owned by this Hermes process, so it cannot be stopped from here. "
-                               f"Ask Hermes to cancel {run_id}, or run /devin cancel {run_id}."}
+        return 409, {
+            "detail": "This run is not owned by this Hermes process, so it cannot be stopped from here. "
+            f"Ask Hermes to cancel {run_id}, or run /devin cancel {run_id}."
+        }
     return 200, {"ok": True, "run": _summary(run.summary())}
 
 
@@ -170,8 +200,11 @@ def devin_mark_candidates() -> list[Path]:
         roots.append(Path(os.environ["DEVIN_APP_DIR"]))
     if os.environ.get("LOCALAPPDATA"):
         roots.append(Path(os.environ["LOCALAPPDATA"]) / "Programs" / "Devin" / "resources" / "app")
-    roots += [Path("/Applications/Devin.app/Contents/Resources/app"), Path("/usr/share/devin/resources/app"),
-              Path("/opt/Devin/resources/app")]
+    roots += [
+        Path("/Applications/Devin.app/Contents/Resources/app"),
+        Path("/usr/share/devin/resources/app"),
+        Path("/opt/Devin/resources/app"),
+    ]
     return [root / "out" / "media" / "letterpress-dark.svg" for root in roots]
 
 

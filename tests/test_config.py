@@ -63,19 +63,22 @@ def test_plan_requires_acp():
         config.parse({"permission_mode": "plan", "backend": "print"})
 
 
-@pytest.mark.parametrize("settings, message", [
-    ({"timeout_seconds": "soon"}, "timeout_seconds"),
-    ({"timeout_seconds": 5}, "between"),
-    ({"max_concurrent_runs": 0}, "between"),
-    ({"max_concurrent_runs": True}, "whole number"),
-    ({"backend": "cloud"}, "backend"),
-    ({"timeout_seconds": 9000}, "max_timeout_seconds"),
-    ({"max_result_chars": 300_000, "max_output_chars": 200_000}, "max_result_chars"),
-    ({"extra_env": {"DEVIN_PERMISSION_MODE": "dangerous"}}, "cannot be set"),
-    ({"extra_env": ["A=1"]}, "mapping"),
-    ({"cancel_grace_seconds": -1}, "between"),
-    ({"allowed_roots": 5}, "list"),
-])
+@pytest.mark.parametrize(
+    "settings, message",
+    [
+        ({"timeout_seconds": "soon"}, "timeout_seconds"),
+        ({"timeout_seconds": 5}, "between"),
+        ({"max_concurrent_runs": 0}, "between"),
+        ({"max_concurrent_runs": True}, "whole number"),
+        ({"backend": "cloud"}, "backend"),
+        ({"timeout_seconds": 9000}, "max_timeout_seconds"),
+        ({"max_result_chars": 300_000, "max_output_chars": 200_000}, "max_result_chars"),
+        ({"extra_env": {"DEVIN_PERMISSION_MODE": "dangerous"}}, "cannot be set"),
+        ({"extra_env": ["A=1"]}, "mapping"),
+        ({"cancel_grace_seconds": -1}, "between"),
+        ({"allowed_roots": 5}, "list"),
+    ],
+)
 def test_invalid_values(settings, message):
     with pytest.raises(config.ConfigError, match=message):
         config.parse(settings)

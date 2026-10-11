@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-PROBE = r'''
+PROBE = r"""
 import inspect, json
 from hermes_cli import plugins
 from tools import approval, interrupt, approval_context
@@ -45,7 +45,7 @@ try:
 except Exception:
     out["plugin_data_dir"] = False
 print("PROBE" + json.dumps(out))
-'''
+"""
 
 
 def _hermes_root() -> Path | None:
@@ -66,14 +66,19 @@ def probe(tmp_path_factory):
     if root is None:
         pytest.skip("Hermes is not installed next to this Python")
     home = tmp_path_factory.mktemp("hermes_home")
-    env = dict(os.environ, HERMES_HOME=str(home), PYTHONDONTWRITEBYTECODE="1",
-               PYTHONPATH=str(root) + os.pathsep + os.environ.get("PYTHONPATH", ""))
-    done = subprocess.run([sys.executable, "-c", PROBE], cwd=str(home), env=env, capture_output=True,
-                          text=True, timeout=180)
+    env = dict(
+        os.environ,
+        HERMES_HOME=str(home),
+        PYTHONDONTWRITEBYTECODE="1",
+        PYTHONPATH=str(root) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", PROBE], cwd=str(home), env=env, capture_output=True, text=True, timeout=180
+    )
     line = next((ln for ln in done.stdout.splitlines() if ln.startswith("PROBE")), None)
     if line is None:
         pytest.skip(f"could not import Hermes: {done.stderr[-500:]}")
-    return json.loads(line[len("PROBE"):])
+    return json.loads(line[len("PROBE") :])
 
 
 def test_hooks_exist(probe):

@@ -11,7 +11,9 @@ store_mod = sub("store")
 
 
 def _api():
-    spec = importlib.util.spec_from_file_location("devin_panel_api_under_test", PLUGIN_DIR / "dashboard" / "plugin_api.py")
+    spec = importlib.util.spec_from_file_location(
+        "devin_panel_api_under_test", PLUGIN_DIR / "dashboard" / "plugin_api.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -19,9 +21,18 @@ def _api():
 
 def test_lists_and_reads_stored_runs(tmp_path):
     st = store_mod.RunStore(tmp_path, throttle_seconds=0)
-    run = models.Run(id=models.new_run_id(), prompt="secret prompt", title="t", cwd="/w", backend="acp",
-                     permission_mode="normal", model="", background=False, timeout_seconds=60,
-                     output=models.CappedText(1000))
+    run = models.Run(
+        id=models.new_run_id(),
+        prompt="secret prompt",
+        title="t",
+        cwd="/w",
+        backend="acp",
+        permission_mode="normal",
+        model="",
+        background=False,
+        timeout_seconds=60,
+        output=models.CappedText(1000),
+    )
     run.output.append("result text")
     st.save(run.snapshot())
     api = _api()
