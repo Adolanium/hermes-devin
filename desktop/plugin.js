@@ -75,8 +75,12 @@ const $runs = atom({})
 const $live = atom({})
 /** The REST backend answered (false: the Python half is off or not mounted). */
 const $backend = atom('unknown')
+const ownerKey = () => JSON.stringify([host.state.connectionId?.get() || '', host.state.profile?.get() || 'default'])
+const $owner = atom(ownerKey())
 
 let rest = null
+let ownerRevision = 0
+let profileScope = null
 
 const isActive = run => Boolean(run) && ACTIVE.has(run.state)
 
@@ -112,12 +116,20 @@ async function refreshRuns() {
     return
   }
 
+  const revision = ownerRevision
   try {
     const body = await rest('/runs?limit=40')
+    if (revision !== ownerRevision) return
+    const nextScope = body.profile_scope || ''
+    if (profileScope !== null && profileScope !== nextScope) {
+      $runs.set({})
+      $live.set({})
+    }
+    profileScope = nextScope
     mergeRuns(body.runs || [])
     $backend.set('ok')
   } catch {
-    $backend.set('off')
+    if (revision === ownerRevision) $backend.set('off')
   }
 }
 
@@ -941,8 +953,9 @@ function FollowUps({ children, ctx, wide }) {
 }
 
 function useRunDetail(runId, active) {
+  const owner = useValue($owner)
   return useQuery({
-    queryKey: [ID, 'run', runId],
+    queryKey: [ID, 'run', runId, owner],
     enabled: Boolean(rest) && RUN_ID.test(runId || ''),
     queryFn: () => rest(`/runs/${runId}${active ? '' : '?output=true'}`),
     refetchInterval: active ? 2500 : false,
@@ -1606,14 +1619,16 @@ function HistoryRow({ run, now, onOpen }) {
 }
 
 function DevinPage({ ctx }) {
+  const owner = useValue($owner)
   const runs = useValue($runs)
   const backend = useValue($backend)
   const [open, setOpen] = useState(null)
   const now = useNow(true)
 
   useEffect(() => {
+    setOpen(null)
     void refreshRuns()
-  }, [])
+  }, [owner])
 
   const all = Object.values(runs).sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
   const active = all.filter(isActive)
@@ -1660,7 +1675,7 @@ function DevinPage({ ctx }) {
               : null
           ]
         }),
-        jsx(NewTask, {}),
+        jsx(NewTask, {}, owner),
         backend === 'off'
           ? jsx('div', {
               style: { ...S.card, ...S.muted },
@@ -1778,6 +1793,30 @@ export default {
 
     const announced = new Set()
     const lastLine = new Map()
+    const resetOwner = () => {
+      const next = ownerKey()
+      if (next === $owner.get()) return
+      ownerRevision += 1
+      profileScope = null
+      $runs.set({})
+      $live.set({})
+      $backend.set('unknown')
+      announced.clear()
+      lastLine.clear()
+      $owner.set(next)
+      void refreshRuns()
+    }
+    for (const store of [host.state.profile, host.state.connectionId]) {
+      if (store?.listen) ctx.onDispose(store.listen(resetOwner))
+    }
+    resetOwner()
+    ctx.onDispose(() => {
+      ownerRevision += 1
+      rest = null
+      profileScope = null
+      $runs.set({})
+      $live.set({})
+    })
 
     // Short progress lines on the pet while Devin edits files or runs commands, at most one
     // every 12 seconds per run.
@@ -1812,6 +1851,12 @@ export default {
       const payload = frame && frame.payload
 
       if (!payload || !payload.run || !RUN_ID.test(payload.run_id || '')) {
+        return
+      }
+      // Shared gateways broadcast across profiles. Older events have no scope;
+      // only update known runs, discovering new ones through the scoped REST API.
+      if (payload.profile_scope ? payload.profile_scope !== profileScope : !$runs.get()[payload.run_id]) {
+        void refreshRuns()
         return
       }
 

@@ -10,6 +10,7 @@ relative imports below work without touching ``sys.path``.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -56,6 +57,9 @@ def build(
         store = RunStore(default_data_dir() if persist else None)
     emit = getattr(ctx, "emit", None)
     bus_kwargs: dict[str, Any] = {"plugin_id": getattr(ctx, "plugin_id", "devin") or "devin", "emit": emit}
+    data_dir = default_data_dir()
+    if data_dir is not None:
+        bus_kwargs["profile_scope"] = hashlib.sha256(str((data_dir / "runs").resolve()).encode()).hexdigest()
     if broadcast != "default":
         bus_kwargs["broadcast"] = broadcast
     bus = EventBus(**bus_kwargs)

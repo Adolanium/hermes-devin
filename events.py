@@ -54,8 +54,10 @@ class EventBus:
         emit: Callable[[str, dict], Any] | None = None,
         broadcast: Callable[[str, str, dict], None] | None = _default_broadcast,
         chatty_interval: float = 0.5,
+        profile_scope: str = "",
     ):
         self.plugin_id = plugin_id
+        self.profile_scope = profile_scope
         self._emit = emit
         self._broadcast = broadcast
         self._listeners: list[Listener] = []
@@ -93,6 +95,8 @@ class EventBus:
             payload["seq"] = event.seq
             payload["event"] = event.to_dict()
         payload.update(extra)
+        if self.profile_scope:
+            payload["profile_scope"] = self.profile_scope
         if type_ == "run.finished":
             with self._lock:
                 self._last_chatty.pop(run.id, None)

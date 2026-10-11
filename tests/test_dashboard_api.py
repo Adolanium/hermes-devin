@@ -49,6 +49,17 @@ def test_lists_and_reads_stored_runs(tmp_path):
     assert api.list_runs(None) == []
 
 
+def test_run_lists_use_distinct_opaque_profile_scopes(tmp_path):
+    api = _api()
+    responses = []
+    for name in ("default", "second"):
+        root = tmp_path / name / "runs"
+        responses.append(api.run_list_response(root))
+    assert responses[0]["runs"] == responses[1]["runs"] == []
+    assert responses[0]["profile_scope"] != responses[1]["profile_scope"]
+    assert all(len(body["profile_scope"]) == 64 and str(tmp_path) not in str(body) for body in responses)
+
+
 def test_manifest_mounts_the_api_without_a_web_tab():
     import json
 

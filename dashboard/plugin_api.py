@@ -22,6 +22,7 @@ has no relative imports.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -141,6 +142,11 @@ def _summary(data: dict[str, Any]) -> dict[str, Any]:
     return {k: data.get(k) for k in _SUMMARY_KEYS if k in data}
 
 
+def run_list_response(root: Path | None, state: str = "all", limit: int = 50, manager: Any = None) -> dict:
+    scope = hashlib.sha256(str(root.resolve()).encode()).hexdigest() if root is not None else ""
+    return {"runs": list_runs(root, state, limit, manager), "live": manager is not None, "profile_scope": scope}
+
+
 def list_runs(
     root: Path | None, state: str = "all", limit: int = 50, manager: Any | None = None
 ) -> list[dict[str, Any]]:
@@ -257,8 +263,7 @@ else:
     def _runs(state: str = "all", limit: int = 50) -> dict[str, Any]:
         if state not in ("all", "active", "finished"):
             raise HTTPException(status_code=400, detail="state must be all, active or finished")
-        manager = live_manager()
-        return {"runs": list_runs(runs_dir(), state, limit, manager), "live": manager is not None}
+        return run_list_response(runs_dir(), state, limit, live_manager())
 
     @router.get("/runs/{run_id}")
     def _run(run_id: str, output: bool = False) -> dict[str, Any]:

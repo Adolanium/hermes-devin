@@ -104,7 +104,7 @@ export function useQuery({ queryKey, enabled }) {
 export const queryClient = { invalidateQueries: () => Promise.resolve() }
 export const host = {
   notify: n => notices.push(n), navigate: () => {}, onEvent: () => () => {},
-  state: {}, request: () => Promise.resolve({}),
+  state: { profile: atom('default'), connectionId: atom(null) }, request: () => Promise.resolve({}),
   newChat: () => notices.push({ newChat: true }),
   composer: { submit: (address, text) => (notices.push({ submit: [address, text] }), true), setDraft: async () => true },
   openWorkspace: (id, options) => (notices.push({ workspace: id, title: options.title }), () => {})
@@ -145,6 +145,7 @@ globalThis.document = {
 }
 
 const pluginModule = await import(pathToFileURL(pluginFile).href)
+const { host: sdkHost } = await import(pathToFileURL(sdkFile).href)
 const plugin = pluginModule.default
 check('default export has id devin', plugin && plugin.id === 'devin')
 
@@ -177,7 +178,8 @@ const ctx = {
       throw new Error('Devin Desktop is not installed')
     }
     if (p.startsWith('/runs?')) {
-      return { runs: [running, failed, done, followUp], live: true }
+      if (state.response) return state.response()
+      return { runs: [running, failed, done, followUp], live: true, profile_scope: 'default-scope' }
     }
     return details[p.split('/')[2]?.split('?')[0]] || {}
   },
@@ -262,6 +264,37 @@ for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
   fn({ type: 'plugin.devin.run.finished', payload })
 }
 check('finish announces once on the pet', state.notices.filter(n => n.pet && n.pet.startsWith('Devin finished')).length === 1, JSON.stringify(state.notices))
+
+state.response = () => ({ runs: [], profile_scope: 'second-scope' })
+sdkHost.state.profile.set('second')
+await new Promise(r => setTimeout(r, 0))
+const secondPage = renderToStaticMarkup(byArea('routes')[0].render())
+check('profile switch clears old history and live state', !secondPage.includes('Add type hints') && !secondPage.includes('Create hello.txt'))
+const noticeCount = state.notices.length
+for (const fn of state.listeners['plugin.devin.run.finished'] || []) {
+  fn({ payload: { type: 'run.finished', run_id: done.id, run: done, profile_scope: 'default-scope' } })
+}
+await new Promise(r => setTimeout(r, 0))
+check('another profile event cannot restore old cards or notify', !renderToStaticMarkup(byArea('routes')[0].render()).includes('Create hello.txt') && state.notices.length === noticeCount)
+
+state.response = null
+sdkHost.state.profile.set('default')
+await new Promise(r => setTimeout(r, 0))
+check('returning to a profile reloads its history', renderToStaticMarkup(byArea('routes')[0].render()).includes('Create hello.txt'))
+state.response = () => ({ runs: [], profile_scope: 'other-connection-scope' })
+sdkHost.state.connectionId.set('other-connection')
+await new Promise(r => setTimeout(r, 0))
+check('same-named profile on another connection has separate history', !renderToStaticMarkup(byArea('routes')[0].render()).includes('Create hello.txt'))
+
+let finishOldRequest
+state.response = () => new Promise(resolve => { finishOldRequest = resolve })
+sdkHost.state.profile.set('slow-profile')
+state.response = () => ({ runs: [], profile_scope: 'latest-scope' })
+sdkHost.state.profile.set('latest-profile')
+await new Promise(r => setTimeout(r, 0))
+finishOldRequest({ runs: [done], profile_scope: 'slow-profile-scope' })
+await new Promise(r => setTimeout(r, 0))
+check('late history response cannot repopulate a different owner', !renderToStaticMarkup(byArea('routes')[0].render()).includes('Create hello.txt'))
 
 if (failures.length) {
   console.error(`desktop smoke: ${failures.length} failure(s)`)

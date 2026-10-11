@@ -88,6 +88,13 @@ Each event goes to three places:
 
 Delivery is best effort and never fails a run. Message and thought chunks are coalesced per run (at most one every half second), so a fast stream does not flood clients. The full text is still kept on the run.
 
+Events and run lists carry `profile_scope`, an opaque hash of the profile's run
+storage location. Desktop accepts events only for the scope returned by its run
+list. Older unscoped events can update known runs; new runs are discovered through
+the profile-scoped API. Switching profile or connection clears run and live-event
+caches, resets the task picker and ignores pending history responses from the old
+owner. Run-detail query keys include both connection and profile.
+
 ## The dashboard backend
 
 `dashboard/plugin_api.py` is the FastAPI router behind the Desktop half:
