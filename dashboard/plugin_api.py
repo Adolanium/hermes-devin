@@ -176,10 +176,9 @@ def devin_mark_candidates() -> list[Path]:
 
 
 def devin_mark(candidates: list[Path] | None = None) -> str | None:
-    """The Devin mark as SVG text, read from the local Devin app; None when it is not installed.
+    """Legacy installed-app mark endpoint; None when the app is absent.
 
-    The plugin does not ship Devin's logo. The Desktop half uses this SVG only as
-    a mask shape inside an image, so nothing in it can run.
+    The Desktop half uses its bundled mark instead, without needing this endpoint.
     """
     for path in candidates if candidates is not None else devin_mark_candidates():
         try:

@@ -63,6 +63,9 @@ A **Devin** page in the sidebar lists active runs and history, and has a **New D
 
 The Desktop half ships in the same folder as the plugin and starts switched off. Turn it on under **Capabilities → Plugins → Devin**.
 
+The trioexagon icon ships with the plugin and works offline. Devin Desktop is not required;
+only the standalone CLI is needed for delegation. See [third-party marks](TRADEMARKS.md).
+
 ## You stay in charge
 
 - **Every run needs your yes.** Each run passes through Hermes' approval prompt. If nobody is there to answer, the run does not start.
