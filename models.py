@@ -227,6 +227,8 @@ class Run:
     session_id: str = ""
     task_id: str = ""
     session_key: str = ""
+    # Started from a Hermes Desktop session: its run card can answer Devin's requests.
+    desktop: bool = False
     state: RunState = RunState.CREATED
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
@@ -250,6 +252,8 @@ class Run:
     # Latest change per file (path -> unified diff record) and recent shell commands, for live views.
     diffs: dict[str, dict[str, Any]] = field(default_factory=dict)
     commands: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Devin's requests waiting for an answer: ask id -> {ask_id, title, kind, via, expires_at}.
+    pending_permissions: dict[str, dict[str, Any]] = field(default_factory=dict)
     output: CappedText = field(default_factory=lambda: CappedText(200_000))
     notified: bool = False
     _seq: int = 0
@@ -325,6 +329,8 @@ class Run:
                 "tool_calls": len(self.tool_calls),
                 "files_changed": self.files_changed()[:50],
                 "permission_requests": len(self.permissions),
+                "pending_permissions": [dict(p) for p in self.pending_permissions.values()],
+                "desktop": self.desktop,
                 "last_activity": self._last_activity(),
             }
             if self.usage:

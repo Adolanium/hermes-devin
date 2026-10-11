@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -143,6 +144,10 @@ class _RunIO:
         self.sandbox = cfg.sandbox
         self.model = cfg.model
         self.permission_requests = cfg.permission_requests
+        self.card_approvals = cfg.card_approvals
+        self.card_timeout = cfg.card_approval_timeout_seconds
+        # Requests waiting for an answer on the Desktop run card, by ask id.
+        self.card_asks: dict[str, _PermissionAsk] = {}
         self._cancel_reason = ""
         # Filled while a foreground handler is waiting and able to ask a human.
         self.asks: queue.Queue[_PermissionAsk] = queue.Queue()
@@ -199,22 +204,68 @@ class _RunIO:
             allowed = policy
         elif self.permission_requests == "deny":
             allowed, reason = False, "permission_requests: deny"
-        elif self.run.background or not self.interactive.is_set():
-            allowed, reason = False, "no one can answer prompts for a background run"
+        elif not self.run.background and self.interactive.is_set():
+            allowed, reason = self._ask_prompt(title, kind)
+        elif self.card_approvals and self.run.desktop:
+            allowed, reason = self._ask_card(title, kind)
         else:
-            ask = _PermissionAsk(title=title, kind=kind)
+            allowed, reason = False, "no one can answer prompts for a background run"
+        self.record_permission(title, kind, allowed, reason, request_id=str(detail.get("tool_call_id") or ""))
+        return allowed, reason
+
+    def _pending(self, title: str, kind: str, via: str, expires_at: float | None = None,
+                 card_ask: _PermissionAsk | None = None) -> str:
+        """Show a request as waiting (on the run card and in every event) and return its id.
+
+        A ``card_ask`` is registered before anyone can see the request, so an answer never races it.
+        """
+        ask_id = uuid.uuid4().hex[:12]
+        if card_ask is not None:
+            self.card_asks[ask_id] = card_ask
+        with self.run._lock:
+            self.run.pending_permissions[ask_id] = {"ask_id": ask_id, "title": title[:300], "kind": kind,
+                                                    "via": via, "expires_at": expires_at}
+            event = self.run.add_event("permission_request", title[:200], ask_id=ask_id, permission_kind=kind,
+                                       via=via)
+        self.manager._publish("run.permission", self.run, event)
+        return ask_id
+
+    def _ask_prompt(self, title: str, kind: str) -> tuple[bool, str]:
+        """Foreground: Hermes' approval prompt answers, through ``wait_foreground``."""
+        ask = _PermissionAsk(title=title, kind=kind)
+        ask_id = self._pending(title, kind, "prompt")
+        try:
             self.asks.put(ask)
             remaining = max(1.0, self.deadline - time.monotonic())
             while not ask.done.wait(0.2):
                 if self.cancel_event.is_set() or not self.interactive.is_set() or remaining <= 0:
                     break
                 remaining -= 0.2
-            if ask.answer is None:
-                allowed, reason = False, "run stopped before the prompt was answered"
-            else:
-                allowed, reason = ask.answer
-        self.record_permission(title, kind, allowed, reason, request_id=str(detail.get("tool_call_id") or ""))
-        return allowed, reason
+        finally:
+            with self.run._lock:
+                self.run.pending_permissions.pop(ask_id, None)
+        if ask.answer is None:
+            return False, "run stopped before the prompt was answered"
+        return ask.answer
+
+    def _ask_card(self, title: str, kind: str) -> tuple[bool, str]:
+        """Background run from Desktop: the run card answers, within ``card_timeout``."""
+        ask = _PermissionAsk(title=title, kind=kind)
+        ask_id = self._pending(title, kind, "card", time.time() + self.card_timeout, card_ask=ask)
+        deadline = min(time.monotonic() + self.card_timeout, self.deadline)
+        try:
+            while not ask.done.wait(0.2):
+                if self.cancel_event.is_set() or time.monotonic() >= deadline:
+                    break
+        finally:
+            self.card_asks.pop(ask_id, None)
+            with self.run._lock:
+                self.run.pending_permissions.pop(ask_id, None)
+        if ask.answer is not None:
+            return ask.answer
+        if self.cancel_event.is_set():
+            return False, "run stopped before the request was answered"
+        return False, f"no answer on the run card within {self.card_timeout}s"
 
     def record_permission(self, title: str, kind: str, allowed: bool, reason: str, *, request_id: str = "") -> None:
         decision = PermissionDecision(
@@ -321,7 +372,7 @@ class RunManager:
 
     def start(self, cfg: DevinConfig, *, prompt: str, cwd: str, background: bool, timeout_seconds: int,
               title: str, approval: ApprovalRecord, session_id: str = "", task_id: str = "",
-              session_key: str = "", argv: list[str] | None = None) -> Run:
+              session_key: str = "", argv: list[str] | None = None, desktop: bool = False) -> Run:
         if self._closed:
             raise RunRefused("shutting_down", "The Devin plugin is shutting down")
         argv = argv if argv is not None else self.preflight(cfg)
@@ -330,7 +381,7 @@ class RunManager:
             id=new_run_id(), prompt=prompt, title=title or _title_from(prompt), cwd=cwd,
             backend=cfg.backend, permission_mode=cfg.permission_mode, model=cfg.model,
             background=background, timeout_seconds=timeout_seconds, session_id=session_id,
-            task_id=task_id, session_key=session_key, approval=approval,
+            task_id=task_id, session_key=session_key, approval=approval, desktop=desktop,
             max_events=cfg.max_progress_events, output=CappedText(cfg.max_output_chars),
         )
         env = self._child_env(cfg)
@@ -428,6 +479,19 @@ class RunManager:
         run.settled.set()
 
     # -- cancel / wait ----------------------------------------------------------------
+
+    def answer_permission(self, run_id: str, ask_id: str, allow: bool) -> str:
+        """Answer a request waiting on the run card. Returns ``answered``, ``no_run`` or ``no_request``."""
+        with self._lock:
+            io = self._io.get(run_id)
+        if io is None:
+            return "no_run"
+        ask = io.card_asks.get(ask_id)
+        if ask is None or ask.done.is_set():
+            return "no_request"
+        ask.answer = (allow, f"{'allowed' if allow else 'denied'} on the run card in Hermes Desktop")
+        ask.done.set()
+        return "answered"
 
     def cancel(self, run_id: str, reason: str = "cancelled by request") -> Run | None:
         with self._lock:

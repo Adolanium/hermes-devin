@@ -124,6 +124,21 @@ def cancel_run(run_id: str, manager: Any | None) -> tuple[int, dict[str, Any]]:
     return 200, {"ok": True, "run": _summary(run.summary())}
 
 
+_ASK_ID = re.compile(r"^[0-9a-f]{6,32}$")
+
+
+def answer_permission(run_id: str, ask_id: str, allow: Any, manager: Any | None) -> tuple[int, dict[str, Any]]:
+    """Answer one of Devin's requests waiting on the run card. Returns ``(status code, body)``."""
+    if not _RUN_ID.match(run_id or "") or not _ASK_ID.match(ask_id or "") or not isinstance(allow, bool):
+        return 400, {"detail": "expected a run id, a request id and allow: true or false"}
+    outcome = manager.answer_permission(run_id, ask_id, allow) if manager is not None else "no_run"
+    if outcome == "no_run":
+        return 409, {"detail": f"Run {run_id} is not owned by this Hermes process."}
+    if outcome == "no_request":
+        return 404, {"detail": "This request was already answered or has expired."}
+    return 200, {"ok": True, "allowed": allow}
+
+
 try:
     from fastapi import APIRouter, HTTPException
 except Exception:  # pragma: no cover - only inside the Hermes dashboard
@@ -144,6 +159,13 @@ else:
         if data is None:
             raise HTTPException(status_code=404, detail="run not found")
         return data
+
+    @router.post("/runs/{run_id}/permissions/{ask_id}")
+    def _answer(run_id: str, ask_id: str, body: dict) -> dict[str, Any]:
+        status, payload = answer_permission(run_id, ask_id, (body or {}).get("allow"), live_manager())
+        if status != 200:
+            raise HTTPException(status_code=status, detail=payload["detail"])
+        return payload
 
     @router.post("/runs/{run_id}/cancel")
     def _cancel(run_id: str) -> dict[str, Any]:

@@ -386,6 +386,8 @@ function eventLine(e) {
 
       return { icon: denied ? 'shield' : 'unlock', text: e.text, tone: denied ? 'var(--ui-yellow)' : 'var(--ui-green)' }
     }
+    case 'permission_request':
+      return { icon: 'question', text: `asks: ${e.text}`, tone: 'var(--ui-yellow)' }
     case 'status':
       return { icon: 'info', text: e.text, tone: 'var(--ui-text-tertiary)' }
     case 'mode':
@@ -661,6 +663,80 @@ function Terminal({ commands }) {
   })
 }
 
+// --- Devin's requests waiting for an answer ----------------------------------------
+
+function PendingRequest({ runId, ask }) {
+  const [busy, setBusy] = useState(false)
+  const now = useNow(ask.via === 'card')
+  const left = ask.expires_at ? Math.max(0, Math.round(ask.expires_at - now / 1000)) : null
+
+  const answer = async allow => {
+    setBusy(true)
+
+    try {
+      await rest(`/runs/${runId}/permissions/${ask.ask_id}`, { method: 'POST', body: { allow } })
+    } catch (error) {
+      host.notify({ kind: 'error', message: (error && error.message) || 'Could not answer Devin' })
+      setBusy(false)
+    }
+  }
+
+  return jsxs('div', {
+    className: 'devin-in',
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      padding: '10px 12px',
+      borderRadius: 9,
+      border: '1px solid color-mix(in srgb, var(--ui-yellow) 45%, transparent)',
+      background: 'color-mix(in srgb, var(--ui-yellow) 8%, transparent)'
+    },
+    children: [
+      jsxs('div', {
+        style: { ...S.row, justifyContent: 'space-between' },
+        children: [
+          jsxs('span', {
+            style: { ...S.row, color: 'var(--ui-yellow)', fontWeight: 600 },
+            children: [jsx(Codicon, { name: 'shield' }), 'Devin asks to']
+          }),
+          jsx('span', { style: { ...S.pill('var(--ui-text-tertiary)') }, children: ask.kind })
+        ]
+      }),
+      jsx('div', { style: { ...S.mono, color: 'var(--ui-text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }, children: ask.title }),
+      ask.via === 'card'
+        ? jsxs('div', {
+            style: { ...S.row, justifyContent: 'space-between' },
+            children: [
+              jsx('span', {
+                style: { ...S.faint, fontSize: 11.5 },
+                children: left === null ? '' : `Denied automatically in ${left}s if nobody answers`
+              }),
+              jsxs('div', {
+                style: S.row,
+                children: [
+                  jsx(Button, { size: 'xs', variant: 'outline', disabled: busy, onClick: () => answer(false), children: 'Deny' }),
+                  jsx(Button, { size: 'xs', variant: 'default', disabled: busy, onClick: () => answer(true), children: 'Allow' })
+                ]
+              })
+            ]
+          })
+        : jsx('span', { style: { ...S.faint, fontSize: 11.5 }, children: "Answer it in Hermes' approval prompt." })
+    ]
+  })
+}
+
+function PendingRequests({ runId, pending }) {
+  if (!pending || pending.length === 0) {
+    return null
+  }
+
+  return jsx('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 6 },
+    children: pending.map(ask => jsx(PendingRequest, { runId, ask }, ask.ask_id))
+  })
+}
+
 function useRunDetail(runId, active) {
   return useQuery({
     queryKey: [ID, 'run', runId],
@@ -671,7 +747,7 @@ function useRunDetail(runId, active) {
   })
 }
 
-function RunCard({ runId, ctx, compact = false }) {
+function RunCard({ runId, ctx, compact = false, wide = false }) {
   const summaries = useValue($runs)
   const liveAll = useValue($live)
   const backend = useValue($backend)
@@ -729,7 +805,7 @@ function RunCard({ runId, ctx, compact = false }) {
   }
 
   return jsxs('div', {
-    style: S.card,
+    style: wide ? { ...S.card, maxWidth: 'none' } : S.card,
     children: [
       live ? jsx('div', { className: 'devin-sweep' }) : null,
       // header
@@ -791,6 +867,7 @@ function RunCard({ runId, ctx, compact = false }) {
       views.diffs.length && !compact ? null : jsx(Files, { files, cwd: run.cwd, os: ctx && ctx.os }),
       compact ? null : jsx(Terminal, { commands: views.commands }),
       compact || !live ? null : jsx(Activity, { events }),
+      live ? jsx(PendingRequests, { runId, pending: run.pending_permissions }) : null,
       compact ? null : jsx(Permissions, { permissions: data.permissions }),
       run.error
         ? jsxs('div', {
@@ -1025,7 +1102,7 @@ function DevinPage({ ctx }) {
           active.length
             ? jsx('div', {
                 style: { display: 'flex', flexDirection: 'column', gap: 12 },
-                children: active.map(r => jsx(RunCard, { runId: r.id, ctx }, r.id))
+                children: active.map(r => jsx(RunCard, { runId: r.id, ctx, wide: true }, r.id))
               })
             : jsxs('div', {
                 style: {
@@ -1053,7 +1130,7 @@ function DevinPage({ ctx }) {
                 style: { display: 'flex', flexDirection: 'column', gap: 2 },
                 children: finished.slice(0, 50).map(r =>
                   open === r.id
-                    ? jsx('div', { style: { padding: '6px 0' }, children: jsx(RunCard, { runId: r.id, ctx }) }, r.id)
+                    ? jsx('div', { style: { padding: '6px 0' }, children: jsx(RunCard, { runId: r.id, ctx, wide: true }) }, r.id)
                     : jsx(HistoryRow, { run: r, now, onOpen: () => setOpen(r.id) }, r.id)
                 )
               })
@@ -1076,9 +1153,14 @@ function DevinChip() {
   }
 
   const latest = active.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))[0]
+  const waiting = active.flatMap(r => (r.pending_permissions || []).filter(p => p.via === 'card'))
 
   return jsx(Tip, {
-    label: latest.last_activity ? `Devin: ${latest.last_activity}` : `Devin: ${latest.title}`,
+    label: waiting.length
+      ? `Devin asks to: ${waiting[0].title}`
+      : latest.last_activity
+        ? `Devin: ${latest.last_activity}`
+        : `Devin: ${latest.title}`,
     children: jsxs('button', {
       type: 'button',
       onClick: () => host.navigate(PAGE),
@@ -1090,14 +1172,16 @@ function DevinChip() {
         padding: '0 7px',
         border: 'none',
         background: 'transparent',
-        color: 'var(--ui-accent)',
+        color: waiting.length ? 'var(--ui-yellow)' : 'var(--ui-accent)',
         fontSize: 11,
         cursor: 'pointer'
       },
-      children: [
-        jsx(GlyphSpinner, { ariaLabel: 'Devin is working' }),
-        jsx('span', { children: active.length === 1 ? 'Devin working' : `Devin · ${active.length} running` })
-      ]
+      children: waiting.length
+        ? [jsx(Codicon, { name: 'shield', style: { fontSize: 12 } }), jsx('span', { children: 'Devin needs you' })]
+        : [
+            jsx(GlyphSpinner, { ariaLabel: 'Devin is working' }),
+            jsx('span', { children: active.length === 1 ? 'Devin working' : `Devin · ${active.length} running` })
+          ]
     })
   })
 }
@@ -1131,6 +1215,15 @@ export default {
 
       if (payload.type === 'run.finished' || payload.type === 'run.state') {
         void queryClient.invalidateQueries({ queryKey: [ID, 'run', payload.run_id] })
+      }
+
+      for (const ask of payload.run.pending_permissions || []) {
+        if (ask.via === 'card' && !announced.has(ask.ask_id)) {
+          announced.add(ask.ask_id)
+          const line = `Devin asks to: ${ask.title}`
+          ctx.pet?.say(line.slice(0, 120), { id: `devin-ask-${ask.ask_id}`, tone: 'wait', ttlMs: 15000 })
+          ctx.os?.notify({ title: 'Devin needs your OK', body: `${payload.run.title}: ${ask.title}`, activate: PAGE })
+        }
       }
 
       if (payload.type === 'run.finished' && !announced.has(payload.run_id)) {

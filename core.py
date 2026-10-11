@@ -228,6 +228,7 @@ class DevinPlugin:
                 timeout_seconds=parsed["timeout"], title=parsed["title"], approval=approval,
                 session_id=str(session_id or ""), task_id=str(task_id or ""),
                 session_key=self.session_key() if parsed["background"] else "", argv=argv,
+                desktop=_session_platform() == "desktop",
             )
         except RunRefused as exc:
             return _error(exc.code, exc.message)

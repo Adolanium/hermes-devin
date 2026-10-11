@@ -49,6 +49,8 @@ class DevinConfig:
     sandbox: bool = False
     trust_workspace: bool = False
     permission_requests: str = "ask"
+    card_approvals: bool = True
+    card_approval_timeout_seconds: int = 300
     approval_scope: str = "run"
     default_cwd: str = ""
     allowed_roots: tuple[str, ...] = ()
@@ -182,6 +184,8 @@ def parse(raw: Mapping[str, Any] | None, *, platform: str | None = None) -> Devi
         sandbox=_bool(raw, "sandbox", False),
         trust_workspace=_bool(raw, "trust_workspace", False),
         permission_requests=_choice(raw, "permission_requests", "ask", PERMISSION_REQUEST_POLICIES),
+        card_approvals=_bool(raw, "card_approvals", True),
+        card_approval_timeout_seconds=_int(raw, "card_approval_timeout_seconds", 300, 30, 3600),
         approval_scope=_choice(raw, "approval_scope", "run", APPROVAL_SCOPES),
         default_cwd=_str(raw, "default_cwd", ""),
         allowed_roots=_str_list(raw, "allowed_roots"),

@@ -47,6 +47,16 @@ config_schema:
     choices: [ask, deny]
     label: Devin's in-run permission prompts
     description: ask relays them to you during foreground runs; background runs always deny.
+  card_approvals:
+    type: bool
+    default: true
+    label: Answer background runs' prompts in Hermes Desktop
+    description: Background runs started from Hermes Desktop ask on their run card instead of being denied.
+  card_approval_timeout_seconds:
+    type: int
+    default: 300
+    label: How long a run card waits for an answer
+    description: Seconds before an unanswered request on the run card is denied (30 to 3600).
   approval_scope:
     type: str
     default: run
