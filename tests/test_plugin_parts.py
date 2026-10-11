@@ -175,6 +175,14 @@ def test_event_sink_errors_are_contained():
     bus.publish("run.created", _run())
 
 
+def test_event_scope_is_bound_to_bus_not_caller_metadata():
+    heard = []
+    bus = events.EventBus(profile_scope="own-profile", broadcast=None)
+    bus.subscribe(heard.append)
+    bus.publish("run.created", _run(), profile_scope="foreign-profile")
+    assert heard[0]["profile_scope"] == "own-profile"
+
+
 def test_store_roundtrip_prune_and_orphans(tmp_path):
     st = store_mod.RunStore(tmp_path, throttle_seconds=0)
     runs = []
