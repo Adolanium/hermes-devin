@@ -1,6 +1,6 @@
 # Run data and events
 
-The run model is designed so a Hermes Desktop panel can be added later without changing how runs work. Everything a panel needs is already written to disk and published live.
+Every run is written to disk and published live. The Desktop half (`desktop/plugin.js`) is built on both, and anything else can use them too.
 
 ## The run record
 
@@ -82,11 +82,12 @@ Delivery is best effort and never fails a run. Message and thought chunks are co
 
 ## The dashboard backend
 
-`dashboard/plugin_api.py` is a read-only FastAPI router over the stored snapshots:
+`dashboard/plugin_api.py` is the FastAPI router behind the Desktop half:
 
 - `GET /runs?state=active|finished|all&limit=50`: run summaries, newest first
-- `GET /runs/{run_id}?output=true`: one full snapshot. Output is left out unless asked for.
+- `GET /runs/{run_id}?output=true`: one snapshot with its last 60 events. Output is left out unless asked for, and the prompt is never included.
+- `POST /runs/{run_id}/cancel`: stop a run, like `devin_cancel_run`.
 
-It reads files only, so it works from the dashboard process without reaching into the agent process. Run ids are validated before any file is touched.
+It prefers the live run manager when the agent half runs in the same process, which is the case for `hermes serve`, the backend Hermes Desktop talks to. Otherwise it reads the stored snapshots, and cancel answers `409` with a hint to ask Hermes or use `/devin cancel`. Run ids are validated before any file is touched.
 
-Hermes mounts it at `/api/plugins/devin/` once a `dashboard/manifest.json` with `"api": "plugin_api.py"` exists. That manifest is meant to ship together with a panel UI. Until then the module is not loaded.
+`dashboard/manifest.json` mounts it at `/api/plugins/devin/`. Its `tab` is hidden and its `entry` is an empty script, so the web dashboard gets no tab. Hermes imports the router only while the plugin is in `plugins.enabled`.
