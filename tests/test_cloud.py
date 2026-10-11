@@ -148,3 +148,19 @@ def test_cloud_followup_never_falls_back_to_local_without_saved_settings(harness
     run = h.manager.get(result["run_id"])
     run.session_config = {}
     assert h.plugin.follow_up(run.id, "more")["error"]["code"] == "not_resumable"
+
+
+def test_cloud_ignores_local_workspace_limits(harness, tmp_path):
+    # allowed_roots that do not cover Hermes' own working directory must not block
+    # Cloud: it never works in a local folder.
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    h = harness({"allowed_roots": [str(elsewhere)]}, scenario="config")
+    with pytest.raises(Exception) as refused:
+        h.plugin.session_options({"values": {}})
+    assert getattr(refused.value, "code", None) == "cwd_not_allowed"
+    menu = pick(h, values={"devin_version": "devin_lite", "repos": "test/app", "platform": "macos"})
+    assert menu["cwd"] == "/"
+    result = h.call("delegate_to_devin", {"prompt": "hello", "launch_id": menu["launch_id"]})
+    assert result["ok"], result
+    assert h.manager.get(result["run_id"]).execution_target == "cloud"

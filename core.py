@@ -29,7 +29,7 @@ from .approval import (
 )
 from .config import ConfigSource, DevinConfig
 from .models import ApprovalRecord, Run, clip
-from .runner import RunManager, RunRefused, resolve_cwd
+from .runner import RunManager, RunRefused, resolve_workspace
 from .session_controls import ControlsError, LaunchConfig, SessionControls, config_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -188,7 +188,11 @@ class DevinPlugin:
                 "Confirm Cloud-managed permissions before starting a Cloud task.", code="cloud_consent_required"
             )
         parsed = _parse_delegate_args(cfg, args)
-        cwd = resolve_cwd(cfg, parsed["cwd"] or (selection.cwd if selection is not None else None))
+        cwd = resolve_workspace(
+            cfg,
+            parsed["cwd"] or (selection.cwd if selection is not None else None),
+            getattr(cfg, "execution_target", "local"),
+        )
         if selection is not None and cwd != selection.cwd:
             raise ControlsError("The saved selection belongs to another workspace. Choose the model again.")
         return cfg, parsed, cwd
@@ -212,7 +216,7 @@ class DevinPlugin:
             raise ControlsError(f"Invalid plugin settings: {err}", code="config_invalid")
         return self.controls.discover(
             cfg,
-            resolve_cwd(cfg, cwd),
+            resolve_workspace(cfg, cwd, target),
             values,
             target=target,
             cloud_permissions_ack=body.get("cloud_permissions_ack", False),
@@ -554,7 +558,7 @@ class DevinPlugin:
         if cfg is None:
             return {"ok": False, "error": {"code": "invalid_settings", "message": err or "Invalid settings."}}
         try:
-            cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
+            cwd = resolve_workspace(cfg, str(parent.get("cwd") or ""), "cloud")
             self.controls.reconnect(cfg, cwd, parent["devin_session_id"], parent.get("session_config") or {})
         except (ControlsError, RunRefused) as exc:
             return {"ok": False, "error": {"code": exc.code, "message": exc.message}}
@@ -619,7 +623,7 @@ class DevinPlugin:
                 return refuse(
                     "cloud_consent_required", "This Cloud run has no permissions confirmation. Start a new task."
                 )
-            cwd = resolve_cwd(cfg, str(parent.get("cwd") or ""))
+            cwd = resolve_workspace(cfg, str(parent.get("cwd") or ""), getattr(cfg, "execution_target", "local"))
             argv = self.manager.preflight(cfg)
             now = time.time()
             approval = ApprovalRecord(

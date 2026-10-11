@@ -90,6 +90,15 @@ def check_auth(argv: list[str], *, run: Callable[..., Any] = subprocess.run, tim
     return AuthStatus(None, out[-500:] or f"devin auth status exited {done.returncode}")
 
 
+def resolve_workspace(cfg: DevinConfig, requested: str | None, target: str) -> str:
+    """The workspace a run or discovery binds to. Cloud never works in a local folder
+    (its processes start at the filesystem root), so it is not checked against
+    ``allowed_roots`` and does not depend on Hermes' own working directory."""
+    if target == "cloud":
+        return os.path.abspath(os.sep)
+    return resolve_cwd(cfg, requested)
+
+
 def resolve_cwd(cfg: DevinConfig, requested: str | None) -> str:
     """Pick and validate the working directory. Raises RunRefused."""
     base = cfg.default_cwd or os.environ.get("TERMINAL_CWD") or os.getcwd()

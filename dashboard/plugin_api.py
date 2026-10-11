@@ -307,6 +307,10 @@ else:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
+            # A workspace refusal is the plugin's own message, not CLI output: show it
+            # instead of blaming the login.
+            if getattr(exc, "code", None) in ("cwd_invalid", "cwd_not_allowed"):
+                raise HTTPException(status_code=400, detail=str(getattr(exc, "message", exc))) from exc
             # Discovery errors can contain CLI stderr; never return raw transport logs.
             raise HTTPException(
                 status_code=409, detail="Could not load model choices. Check CLI login and workspace access."
