@@ -162,6 +162,29 @@ class Agent:
             outcome2 = (answer2.get("result") or {}).get("outcome") or {}
             text_chunk(sid, f"edit outcome: {outcome2.get('optionId')}\n")
         update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"})
+        if SCENARIO == "live":
+            # Shapes captured from Devin CLI 3000.11.3: an edit with old and new text, a new file
+            # (no oldText), and a command whose output arrives as a growing snapshot.
+            path = os.path.join(os.getcwd(), "calc.py")
+            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "e1", "title": "Edit file", "kind": "edit",
+                         "content": [{"type": "diff", "path": path, "oldText": "def add(a, b):\n    return a + b\n",
+                                      "newText": "def add(a: int, b: int) -> int:\n    return a + b\n"}]})
+            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "e1", "status": "completed"})
+            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "e2", "title": "Write file", "kind": "edit",
+                         "content": [{"type": "diff", "path": os.path.join(os.getcwd(), "notes.md"),
+                                      "newText": "# Notes\n"}]})
+            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "x1", "title": "Ran pytest", "kind": "execute",
+                         "rawInput": {"command": "pytest -q"}})
+            for upto in (1, 2, 3):
+                update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "x1", "status": "in_progress",
+                             "content": [{"type": "content", "content": {
+                                 "type": "text", "text": "\n".join(f"line {i}" for i in range(upto))}}]})
+            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "x1", "status": "in_progress",
+                         "_meta": {"terminal_exit": {"exit_code": 1}}})
+            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "x1", "status": "completed"})
+            update(sid, {"sessionUpdate": "tool_call", "toolCallId": "r1", "title": "Read file", "kind": "read"})
+            update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": "r1", "status": "completed",
+                         "content": [{"type": "content", "content": {"type": "text", "text": "6 lines"}}]})
         if SCENARIO == "diff_edit":
             # Real Devin names edited files only in diff content, never in locations.
             update(sid, {"sessionUpdate": "tool_call", "toolCallId": "t4", "title": "Wrote util.py", "kind": "edit",

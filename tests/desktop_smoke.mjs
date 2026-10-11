@@ -56,6 +56,16 @@ const details = {
       { content: 'Run tests', status: 'pending' }
     ],
     permissions: [{ decision: 'allowed', title: 'Run pytest', kind: 'execute' }],
+    diffs: [
+      {
+        path: 'C:\\work\\app\\src\\utils.py',
+        patch: '@@ -1,2 +1,2 @@\n-def add(a, b):\n+def add(a: int, b: int) -> int:\n     return a + b',
+        added: 1,
+        removed: 1,
+        new_file: false
+      }
+    ],
+    commands: [{ tool_call_id: 'x1', command: 'pytest -q', output: '3 passed', exit_code: 0, status: 'completed' }],
     events: [
       { seq: 1, kind: 'tool_call', text: 'Read src/utils.py', data: { tool_kind: 'read' } },
       { seq: 2, kind: 'tool_call', text: 'Edit src/utils.py', data: { tool_kind: 'edit' } },
@@ -176,8 +186,12 @@ const render = (name, node, expect = []) => {
 }
 
 const directive = byArea('transcript.directive')[0].data
+for (const fn of state.listeners['plugin.devin.run.progress'] || []) {
+  fn({ type: 'plugin.devin.run.progress', payload: { type: 'run.progress', run_id: running.id, run: running, event: { seq: 5, kind: 'terminal', text: 'npm test', data: { tool_call_id: 'x2', command: 'npm test', output: 'tick 0\ntick 1', status: 'running' } } } })
+}
 render('running card', directive.render({ attrs: { id: running.id }, streaming: false }),
-  ['Add type hints', 'Working', 'utils.py', 'Read utils.py', 'Stop', 'Edit src/models.py', '15k tokens'])
+  ['Add type hints', 'Working', 'utils.py', 'Read utils.py', 'Stop', 'Edit src/models.py', '15k tokens',
+   'Changes · 1 file', '+def add(a: int, b: int) -&gt; int:', 'following Devin', 'pytest -q', 'exit 0', 'npm test', 'tick 1'])
 render('finished card', directive.render({ attrs: { id: done.id }, streaming: false }), ['Create hello.txt', 'Done', 'hello.txt'])
 render('failed card', directive.render({ attrs: { id: failed.id }, streaming: false }), ['permission_denied'])
 check('directive ignores a bad id', directive.render({ attrs: { id: '../x' }, streaming: false }) === null)

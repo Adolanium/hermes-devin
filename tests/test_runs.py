@@ -294,3 +294,31 @@ def test_messages_around_tool_calls_become_paragraphs(harness):
     h = harness(scenario="two_messages")
     result = h.call("delegate_to_devin", {"prompt": "x"})
     assert result["output"].startswith("I'll look first.\n\nFixed the bug in app.py. "), result["output"]
+
+
+def test_live_diffs_and_command_output(harness):
+    h = harness(scenario="live")
+    result = h.call("delegate_to_devin", {"prompt": "x"})
+    assert result["state"] == "succeeded", result
+    run = h.manager.get(result["run_id"])
+    snap = run.snapshot()
+    diffs = {d["path"].replace("\\", "/").rsplit("/", 1)[-1]: d for d in snap["diffs"]}
+    calc = diffs["calc.py"]
+    assert calc["new_file"] is False and calc["added"] == 1 and calc["removed"] == 1
+    assert "-def add(a, b):" in calc["patch"] and "+def add(a: int, b: int) -> int:" in calc["patch"]
+    assert diffs["notes.md"]["new_file"] is True and diffs["notes.md"]["added"] == 1
+    assert snap["commands"] == [{"tool_call_id": "x1", "command": "pytest -q", "output": "line 0\nline 1\nline 2",
+                                 "exit_code": 1, "status": "completed"}]
+    terminal = [e for e in snap["events"] if e["kind"] == "terminal"]
+    assert len(terminal) == 1 and terminal[0]["data"]["exit_code"] == 1  # grows in place
+    assert [e for e in snap["events"] if e["kind"] == "diff"][0]["text"] == "Edited calc.py (+1 -1)"
+    assert all(c["tool_call_id"] != "r1" for c in snap["commands"])  # reads are not commands
+
+
+def test_unified_diff_is_capped():
+    backends = sub("backends")
+    old = "\n".join(f"a{i}" for i in range(400))
+    new = "\n".join(f"b{i}" for i in range(400))
+    d = backends.unified_diff("big.txt", old, new)
+    assert d["truncated"] is True and len(d["patch"].splitlines()) == 160
+    assert d["added"] == 400 and d["removed"] == 400

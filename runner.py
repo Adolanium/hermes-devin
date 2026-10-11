@@ -165,6 +165,12 @@ class _RunIO:
                 last.text += text
                 last.at = time.time()
                 event = last
+            elif last is not None and kind == "terminal" and last.kind == kind \
+                    and last.data.get("tool_call_id") == data.get("tool_call_id"):
+                # A running command's output grows in place: one event per command.
+                last.text, last.at = text[:4000], time.time()
+                last.data = {k: v for k, v in data.items() if v is not None}
+                event = last
             else:
                 event = run.add_event(kind, text, **data)
         self.manager._publish("run.progress", run, event)

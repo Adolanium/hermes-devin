@@ -455,6 +455,212 @@ function Permissions({ permissions }) {
   })
 }
 
+// --- live changes and terminal ---------------------------------------------------
+
+/** Latest diff per file and recent commands: the REST detail overlaid with live events. */
+function liveViews(data, events) {
+  const diffs = new Map()
+  const commands = new Map()
+
+  for (const d of data.diffs || []) {
+    diffs.set(d.path, d)
+  }
+
+  for (const c of data.commands || []) {
+    commands.set(c.tool_call_id, c)
+  }
+
+  for (const e of events) {
+    const d = e.data || {}
+
+    if (e.kind === 'diff' && d.path) {
+      diffs.delete(d.path)
+      diffs.set(d.path, { ...d, seq: e.seq })
+    } else if (e.kind === 'terminal' && d.tool_call_id) {
+      commands.set(d.tool_call_id, { ...commands.get(d.tool_call_id), ...d, seq: e.seq })
+    }
+  }
+
+  return { diffs: [...diffs.values()], commands: [...commands.values()] }
+}
+
+const LINE = {
+  add: {
+    background: 'var(--ui-diff-add-background, color-mix(in srgb, var(--ui-green) 14%, transparent))',
+    color: 'var(--ui-diff-add-foreground, var(--ui-green))'
+  },
+  remove: {
+    background: 'var(--ui-diff-remove-background, color-mix(in srgb, var(--ui-red) 14%, transparent))',
+    color: 'var(--ui-diff-remove-foreground, var(--ui-red))'
+  },
+  hunk: { color: 'var(--ui-text-quaternary)' },
+  same: { color: 'var(--ui-text-tertiary)' }
+}
+
+const box = {
+  ...S.mono,
+  fontSize: 11.5,
+  lineHeight: '17px',
+  borderRadius: 8,
+  border: '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 45%, transparent)',
+  background: 'color-mix(in srgb, var(--ui-text-primary) 3%, transparent)',
+  overflow: 'auto',
+  maxHeight: 260
+}
+
+function DiffView({ diff }) {
+  const lines = String(diff.patch || '').split('\n')
+
+  return jsxs('div', {
+    className: 'devin-in',
+    style: { ...box, padding: '6px 0' },
+    children: [
+      ...lines.map((line, i) => {
+        const tone = line.startsWith('@@')
+          ? LINE.hunk
+          : line.startsWith('+')
+            ? LINE.add
+            : line.startsWith('-')
+              ? LINE.remove
+              : LINE.same
+
+        return jsx('div', { style: { ...tone, padding: '0 10px', whiteSpace: 'pre' }, children: line || ' ' }, i)
+      }),
+      diff.truncated ? jsx('div', { style: { ...LINE.hunk, padding: '2px 10px' }, children: '… diff truncated' }) : null
+    ]
+  })
+}
+
+function Changes({ diffs, cwd, os, live }) {
+  const [picked, setPicked] = useState(null)
+
+  if (!diffs.length) {
+    return null
+  }
+
+  // Follow Devin's latest edit until the user picks a file.
+  const latest = diffs[diffs.length - 1]
+  const current = diffs.find(d => d.path === picked) || latest
+  const added = diffs.reduce((n, d) => n + (d.added || 0), 0)
+  const removed = diffs.reduce((n, d) => n + (d.removed || 0), 0)
+
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 6 },
+    children: [
+      jsxs('div', {
+        style: { ...S.row, justifyContent: 'space-between' },
+        children: [
+          jsxs('span', {
+            style: { ...S.row, gap: 6 },
+            children: [
+              jsx('span', { style: S.label, children: `Changes · ${diffs.length} file${diffs.length === 1 ? '' : 's'}` }),
+              jsx('span', { style: { ...S.mono, color: 'var(--ui-green)' }, children: `+${added}` }),
+              jsx('span', { style: { ...S.mono, color: 'var(--ui-red)' }, children: `−${removed}` })
+            ]
+          }),
+          live && !picked ? jsx('span', { style: { ...S.faint, fontSize: 11 }, children: 'following Devin' }) : null
+        ]
+      }),
+      jsx('div', {
+        style: { display: 'flex', flexWrap: 'wrap', gap: 5 },
+        children: diffs
+          .slice(-12)
+          .reverse()
+          .map(d =>
+            jsxs(
+              'button',
+              {
+                type: 'button',
+                className: d === latest && live ? 'devin-flash' : undefined,
+                onClick: () => setPicked(d.path === picked ? null : d.path),
+                style: {
+                  ...S.chip,
+                  borderColor: d.path === current.path ? 'var(--ui-accent)' : S.chip.border,
+                  color: d.path === current.path ? 'var(--ui-text-primary)' : S.chip.color
+                },
+                children: [
+                  jsx(Codicon, { name: d.new_file ? 'diff-added' : 'diff-modified', style: { color: d.new_file ? 'var(--ui-green)' : 'var(--ui-yellow)' } }),
+                  jsx('span', {
+                    style: { ...S.mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                    children: shortPath(d.path, cwd)
+                  }),
+                  jsx('span', { style: { ...S.mono, fontSize: 11, color: 'var(--ui-green)' }, children: `+${d.added || 0}` }),
+                  jsx('span', { style: { ...S.mono, fontSize: 11, color: 'var(--ui-red)' }, children: `−${d.removed || 0}` })
+                ]
+              },
+              d.path
+            )
+          )
+      }),
+      jsxs('div', {
+        style: { ...S.row, justifyContent: 'space-between', fontSize: 11.5 },
+        children: [
+          jsx('span', { style: { ...S.mono, ...S.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: current.path }),
+          os
+            ? jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => os.revealPath(current.path), children: 'Show in folder' })
+            : null
+        ]
+      }),
+      jsx(DiffView, { diff: current }, `${current.path}:${current.seq || 0}:${(current.patch || '').length}`)
+    ]
+  })
+}
+
+function CommandView({ command }) {
+  const running = command.status !== 'completed' && command.status !== 'failed' && command.exit_code == null
+  const ok = command.exit_code === 0
+  const lines = String(command.output || '').split('\n')
+  const tail = lines.slice(-14).join('\n')
+
+  return jsxs('div', {
+    style: { ...box, padding: 0 },
+    children: [
+      jsxs('div', {
+        style: {
+          ...S.row,
+          justifyContent: 'space-between',
+          padding: '5px 10px',
+          borderBottom: command.output ? '1px solid color-mix(in srgb, var(--ui-stroke-secondary) 35%, transparent)' : 'none'
+        },
+        children: [
+          jsxs('span', {
+            style: { ...S.row, minWidth: 0, color: 'var(--ui-text-primary)' },
+            children: [
+              jsx('span', { style: { color: 'var(--ui-accent)' }, children: '$' }),
+              jsx('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: command.command })
+            ]
+          }),
+          running
+            ? jsx(GlyphSpinner, { ariaLabel: 'running' })
+            : command.exit_code == null
+              ? jsx('span', { style: S.faint, children: command.status })
+              : jsx('span', { style: S.pill(ok ? 'var(--ui-green)' : 'var(--ui-red)'), children: `exit ${command.exit_code}` })
+        ]
+      }),
+      command.output
+        ? jsx('div', {
+            style: { padding: '6px 10px', whiteSpace: 'pre-wrap', color: 'var(--ui-text-secondary)' },
+            children: lines.length > 14 ? `…\n${tail}` : tail
+          })
+        : null
+    ]
+  })
+}
+
+function Terminal({ commands }) {
+  if (!commands.length) {
+    return null
+  }
+
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 6 },
+    children: [
+      jsx('div', { style: S.label, children: 'Terminal' }),
+      ...commands.slice(-2).map(c => jsx(CommandView, { command: c }, c.tool_call_id))
+    ]
+  })
+}
+
 function useRunDetail(runId, active) {
   return useQuery({
     queryKey: [ID, 'run', runId],
@@ -509,6 +715,7 @@ function RunCard({ runId, ctx, compact = false }) {
   })()
 
   const files = run.files_changed || []
+  const views = liveViews(data, events)
   const stop = async () => {
     setStopping(true)
 
@@ -580,7 +787,9 @@ function RunCard({ runId, ctx, compact = false }) {
         ? jsx('div', { style: { ...S.muted, ...S.mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: run.last_activity })
         : null,
       compact ? null : jsx(Plan, { plan: data.plan }),
-      jsx(Files, { files, cwd: run.cwd, os: ctx && ctx.os }),
+      compact ? null : jsx(Changes, { diffs: views.diffs, cwd: run.cwd, os: ctx && ctx.os, live }),
+      views.diffs.length && !compact ? null : jsx(Files, { files, cwd: run.cwd, os: ctx && ctx.os }),
+      compact ? null : jsx(Terminal, { commands: views.commands }),
       compact || !live ? null : jsx(Activity, { events }),
       compact ? null : jsx(Permissions, { permissions: data.permissions }),
       run.error

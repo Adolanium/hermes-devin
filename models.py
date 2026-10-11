@@ -247,6 +247,9 @@ class Run:
     max_events: int = 500
     tool_calls: dict[str, dict[str, Any]] = field(default_factory=dict)
     plan: list[dict[str, Any]] = field(default_factory=list)
+    # Latest change per file (path -> unified diff record) and recent shell commands, for live views.
+    diffs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    commands: dict[str, dict[str, Any]] = field(default_factory=dict)
     output: CappedText = field(default_factory=lambda: CappedText(200_000))
     notified: bool = False
     _seq: int = 0
@@ -365,6 +368,8 @@ class Run:
                 "approval": self.approval.to_dict() if self.approval else None,
                 "permissions": [p.to_dict() for p in self.permissions],
                 "plan": list(self.plan),
+                "diffs": [dict(d) for d in list(self.diffs.values())[-30:]],
+                "commands": [dict(c) for c in list(self.commands.values())[-10:]],
                 "cancel_reason": self.cancel_reason,
                 "kill_report": dict(self.kill_report),
                 "events_dropped": self.events_dropped,
