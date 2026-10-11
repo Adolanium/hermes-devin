@@ -1,5 +1,7 @@
 # Cloud sessions
 
+[Documentation](../README.md)
+
 Open **Devin → New Devin task** in Hermes Desktop and select **Devin Cloud**.
 The agent plugin must be enabled with `backend: acp`, and the standalone Devin CLI
 must support `devin acp --cloud` and be signed in. Devin Desktop is not required.

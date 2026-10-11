@@ -1,10 +1,12 @@
 # Configuration reference
 
+[Documentation](../README.md)
+
 The Desktop target selector uses ephemeral, approval-bound launch settings, not new
 manifest settings. Cloud requires `backend: acp`; the print backend remains Local.
 Local `model`, `permission_mode`, `sandbox` and workspace-trust settings are not passed
 to Cloud. Cloud preferences are profile-scoped and separate from Local defaults.
-See [Cloud sessions](cloud-sessions.md).
+See [Cloud sessions](../guides/cloud-sessions.md).
 
 All settings live under `plugins.entries.devin.settings` in Hermes' `config.yaml`. Older setups that use a `config` key in the same place are still read. Hermes Desktop renders the same fields from `config_schema` in `plugin.yaml`.
 
@@ -53,7 +55,7 @@ plugins:
 
 | Setting | Default | Values | What it does |
 | --- | --- | --- | --- |
-| `backend` | `acp` | `acp`, `print` | How Devin is driven. See [How it works](how-it-works.md#why-acp-instead-of-devin--p). |
+| `backend` | `acp` | `acp`, `print` | How Devin is driven. See [How it works](../development/how-it-works.md#why-acp-instead-of-devin--p). |
 | `permission_mode` | `normal` | `plan`, `normal`, `accept-edits`, `smart`, `dangerous`, `autonomous` | How much Devin may do without asking. Aliases: `auto` → `normal`; `yolo` and `bypass` → `dangerous`. |
 | `allow_dangerous` | `false` | bool | Required for `permission_mode: dangerous`. Without it the setting is rejected. |
 | `permission_requests` | `ask` | `ask`, `deny` | What happens to Devin's in-run permission prompts that the mode does not settle. `ask` relays them to you in foreground runs. Background runs deny them, unless the run card can answer (see `card_approvals`). |
@@ -76,7 +78,7 @@ plugins:
 | `preflight_auth_check` | `true` | Run `devin auth status` before a run. Success is cached for five minutes. |
 | `extra_env` | `{}` | Extra environment variables for Devin. Cannot set `DEVIN_PERMISSION_MODE`; the plugin always sets that from `permission_mode`. |
 
-Desktop's [Local model controls](model-controls.md) override `model` only for the
+Desktop's [Local model controls](../guides/model-controls.md) override `model` only for the
 approved run and its follow-ups. They use server-advertised values, not extra config
 schema fields. Local defaults are profile-scoped and saved after approval when
 `persist_runs` is enabled; ordinary chat delegation still uses the plugin setting.

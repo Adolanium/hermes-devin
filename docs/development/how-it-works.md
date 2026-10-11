@@ -1,12 +1,14 @@
 # How it works
 
+[Documentation](../README.md)
+
 The sequence below describes Local execution. A Desktop launch can also supply an
 opaque `launch_id` that binds target-specific selections and consent to approval.
 Cloud uses the same ACP backend with `--cloud`, a neutral remote working directory
 and no Local permission-mode setup. Cancellation requires the original prompt's
 `cancelled` response; a disconnected relay alone means remote activity is unknown.
 Follow-ups and read-only reconnect checks use advertised `session/load` support.
-See [Cloud sessions](cloud-sessions.md).
+See [Cloud sessions](../guides/cloud-sessions.md).
 
 This page follows one run from the tool call to the result, then explains why the plugin drives Devin over ACP.
 
@@ -14,7 +16,7 @@ This page follows one run from the tool call to the result, then explains why th
 
 1. **The model calls `delegate_to_devin`.** Arguments are limited to `prompt`, `cwd`, `background`, `timeout_seconds`, `title` and an optional opaque `launch_id`. Anything else is rejected, including any attempt to set the permission mode, model or sandbox.
 2. **The `pre_tool_call` hook checks the call.** It validates the settings and arguments, resolves the working directory, finds the Devin CLI and checks the concurrency limit. If the run could never start, the call is blocked with a clear error and you are not asked anything.
-3. **Hermes asks you.** Otherwise the hook answers with an `approve` directive. Hermes shows its normal approval prompt (CLI prompt, gateway buttons or Desktop dialog), naming the folder, the permission mode, foreground or background, the timeout, the backend and the task. See [Approval and permissions](approval-and-permissions.md).
+3. **Hermes asks you.** Otherwise the hook answers with an `approve` directive. Hermes shows its normal approval prompt (CLI prompt, gateway buttons or Desktop dialog), naming the folder, the permission mode, foreground or background, the timeout, the backend and the task. See [Approval and permissions](../reference/approval-and-permissions.md).
 4. **Preflight.** The handler runs `devin auth status`. A clear "not logged in" answer stops the run with instructions to run `devin auth login`. A successful check is cached for five minutes. Output the plugin does not recognise never blocks a run.
 5. **Devin starts.** `devin acp` is started in the chosen folder, in its own process group, and on Windows inside a Job Object. See [Process trees](process-tree.md).
 6. **The session runs.** The plugin speaks JSON-RPC over stdio:
@@ -22,7 +24,7 @@ This page follows one run from the tool call to the result, then explains why th
    - `session/new` with the working directory, or `session/load` for a follow-up, which continues an earlier run's Devin session. The conversation Devin replays on load is not added to the new run
    - `session/set_mode` when Devin advertises a mode matching the configured permission mode. A mode is matched by exact id or name. If Devin advertises modes but none matches, the run is refused.
    - `session/prompt` with the task
-7. **Progress streams in.** `session/update` notifications become run events: message and thought chunks, tool calls with their kind and file locations, plan updates, mode changes and usage. Devin's `session/request_permission` calls are answered by the plugin. See [Approval and permissions](approval-and-permissions.md#devins-own-permission-prompts).
+7. **Progress streams in.** `session/update` notifications become run events: message and thought chunks, tool calls with their kind and file locations, plan updates, mode changes and usage. Devin's `session/request_permission` calls are answered by the plugin. See [Approval and permissions](../reference/approval-and-permissions.md#devins-own-permission-prompts).
 8. **The run ends.** The prompt returns with a stop reason: `end_turn` is success, `cancelled` is a stop, `refusal` and `max_tokens` are reported as such. Errors are mapped to clear codes, listed below.
 9. **Results come back.**
    - A foreground call returns the output (capped, head and tail kept), the files changed, permission decisions, usage and any error.
@@ -83,7 +85,7 @@ short-lived discovery process, without `session/prompt`. It returns a single-use
 normal approval gate. The task session confirms the selected controls, restores
 the configured permission mode and only then sends the prompt. Model updates are
 recorded; unapproved configuration changes cancel a pinned run. See
-[Local model controls](model-controls.md).
+[Local model controls](../guides/model-controls.md).
 
 ## Settings are read live
 

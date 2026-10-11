@@ -1,5 +1,7 @@
 # Development and testing
 
+[Documentation](../README.md)
+
 The plugin is plain Python 3.11+ with no dependencies beyond Hermes itself.
 
 ## Layout
@@ -21,7 +23,7 @@ The plugin is plain Python 3.11+ with no dependencies beyond Hermes itself.
 | `schemas.py` | Tool schemas |
 | `session_controls.py` | ACP model discovery, sanitized options and single-use launch selections |
 | `slash.py` | `/devin` command |
-| `dashboard/plugin_api.py` | Runs API for the Desktop half; `manifest.json` mounts it |
+| `dashboard/plugin_api.py` | Runs API for the Desktop half; `plugin.yaml` mounts it |
 | `desktop/plugin.js` | Desktop half: live run card, Devin page, status-bar chip |
 
 ## Running the tests

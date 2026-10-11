@@ -1,5 +1,7 @@
 # Local model controls
 
+[Documentation](../README.md)
+
 In Hermes Desktop, open **Devin → New Devin task**, set the local folder, then choose
 **Choose a model or Fusion pairing**. This needs the agent plugin enabled and `backend: acp`.
 The standalone Devin CLI must be installed and signed in. Devin Desktop is not required.
@@ -49,8 +51,8 @@ and uses the existing `model` setting or CLI default.
 An older CLI without ACP model controls can still use the plugin defaults. The print
 backend uses the `model` plugin setting and cannot use this picker. Permission modes
 remain independent: a model selection cannot make an unsupported ACP permission mode
-work or widen it to another mode. See [Configuration](configuration.md) and
-[Approval and permissions](approval-and-permissions.md).
+work or widen it to another mode. See [Configuration](../reference/configuration.md) and
+[Approval and permissions](../reference/approval-and-permissions.md).
 
 This page describes Local execution only. Cloud execution is not enabled by a Local
 model or Fusion selection. Use the separate target selector described in [Cloud sessions](cloud-sessions.md).

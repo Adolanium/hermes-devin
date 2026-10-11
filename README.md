@@ -1,231 +1,120 @@
 <div align="center">
 
   <a href="https://github.com/NousResearch/hermes-agent">
-    <img src="https://github.com/user-attachments/assets/ac2f5702-c842-4b2e-9340-737481fa0ece" width="96" height="96" alt="Nous Research Hermes mark" />
+    <img src="assets/branding/hermes-mark.jpg" width="96" height="96" alt="Hermes Agent mark, owned by Nous Research" />
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://devin.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/branding/devin-mark-dark.svg" />
+      <img src="assets/branding/devin-mark.svg" width="88" height="96" alt="Devin trioexagon mark, owned by Cognition" />
+    </picture>
   </a>
 
-  # Hermes Devin
+  <h1>Hermes × Devin</h1>
 
-  **Hand the coding task to Devin. Keep your hand on the switch.**
+  <p><strong>Delegate coding tasks to Devin without leaving Hermes.</strong></p>
 
-  Hermes Devin lets Hermes delegate coding tasks through the Devin CLI, locally
-  or in Devin Cloud. You approve every task. Local runs use your permission
-  settings; Cloud runs use Cloud-managed permissions and report whether remote
-  cancellation was confirmed.
+  <p>Run Devin on your computer or in the Cloud.<br />Choose an available model and review the work in your conversation.</p>
 
-  <sub>POWERED BY <a href="https://github.com/NousResearch/hermes-agent">HERMES AGENT</a> &nbsp;·&nbsp; COMMUNITY PLUGIN &nbsp;·&nbsp; VERSION 0.1.0</sub>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f6f4e" alt="Plugin license: MIT" /></a>
+    <a href="docs/guides/cloud-sessions.md"><img src="https://img.shields.io/badge/Devin-Local_%2B_Cloud-1f6feb" alt="Devin Local and Cloud targets" /></a>
+    <a href="TRADEMARKS.md"><img src="https://img.shields.io/badge/independent-community_add--on-626870" alt="Independent community add-on" /></a>
+  </p>
 
-  <br /><br />
+  <p><a href="#quick-start">Quick start</a> &nbsp;·&nbsp; <a href="docs/README.md">Documentation</a></p>
 
-  [See what it does](#a-second-pair-of-hands-in-the-chat) &nbsp;·&nbsp; [Install it](#make-it-yours) &nbsp;·&nbsp; [Read the safety model](#you-stay-in-charge)
+  <p><sub>Hermes Agent by <a href="https://nousresearch.com">Nous Research</a> · Devin by <a href="https://cognition.ai">Cognition</a>.<br />A community add-on, not an official product of either company.</sub></p>
 
 </div>
 
-## Powered by Hermes
+<p align="center">
+  <img src="assets/screenshots/desktop-review.png" width="100%" alt="Hermes Desktop reviewing a completed Devin task, with both CSS and HTML edits grouped under one file" />
+</p>
 
-Hermes Devin is a community-built agent plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It adds tools to Hermes' own `delegation` toolset, asks through Hermes' own approval prompt, and posts results back into the same conversation. It works the same in the CLI, the TUI, Hermes Desktop and the messaging gateway.
+<p align="center"><sub>A real Local run in Hermes Desktop. Review shows recorded edits, not a net Git diff.</sub></p>
 
-Both targets use the [Devin CLI](https://cli.devin.ai) you installed and logged in to.
-Local runs use `devin acp`; Cloud runs use `devin acp --cloud`. The plugin does not
-store a separate Cloud API key or use a separate Cloud API client.
+## Devin does the coding. Hermes keeps the conversation.
 
-## A second pair of hands in the chat
+Ask Hermes to hand a task to Devin. The plugin sends the brief through the
+[Devin CLI](https://cli.devin.ai), streams progress and returns the result to Hermes.
+Use it in Hermes Desktop, the CLI, the TUI or the messaging gateway.
 
-Ask Hermes to give a task to Devin and keep talking. Hermes writes the brief, you approve it, and Devin works in the folder you name.
+- **Choose where Devin works.** Local runs work in a folder on your computer.
+  Cloud runs work in a remote environment with the account's available repositories.
+- **Choose how Devin thinks.** Desktop discovers the models and controls your session
+  advertises, including Fusion where available. Local and Cloud keep separate selections.
+- **Follow the work in Desktop.** Live cards show Devin's plan, command output and file
+  edits. Open Review changes or send a follow-up after a run finishes.
+- **Approve launches through Hermes.** Local runs enforce your configured permission
+  mode. Cloud runs require a separate Cloud-managed-permissions confirmation.
 
-| | |
-| --- | --- |
-| **Delegate**<br />Hermes hands Devin a complete brief: goal, files, constraints, how to verify. You see the folder, the permission mode, the timeout and the task before anything starts. | **Watch**<br />Progress streams live: Devin's messages, the files it edits, its plan, token use and every permission decision. `/devin status` shows it at a glance. |
-| **Background it**<br />Long tasks return a run id right away. The result lands in the chat when Devin finishes. A concurrency limit keeps two or three runs from turning into twenty. | **Stop it**<br />Interrupt, cancel, a timeout, or quitting Hermes ends the run. Devin is asked to stop first, then its whole process tree is closed. You get a report of how it went. |
+The plugin uses `devin acp` for Local and `devin acp --cloud` for Cloud.
+No separate Cloud API key, extra service or Devin Desktop installation is required.
+Hermes and the Devin CLI each need their own authentication.
 
-An illustrative exchange:
+## Local or Cloud
 
-```text
-You     › Have Devin add type hints to src/utils.py in E:\Dev\myapp and run the tests.
-Hermes  › [approval] Start a Devin run in E:\Dev\myapp; permission mode 'accept-edits' ... Allow?
-Devin   › edits src/utils.py · asks to run pytest → you approve · 41 passed
-Hermes  › Devin finished: 1 file changed, tests pass. Here is the summary ...
-```
+| | Local computer | Devin Cloud |
+| --- | --- | --- |
+| Workspace | Your selected folder | Remote repositories and platform choices |
+| Models | Session-advertised models, Fusion pairings and supported thinking controls | Account-advertised Cloud presets and controls |
+| Permissions | Your Local permission mode, with in-run approval where supported | Cloud-managed permissions, confirmed before launch |
+| Stop | Cancel the task and clean up tracked Local processes | Request remote cancellation and show whether Devin confirmed it |
 
-## Watch it work in Hermes Desktop
+Cloud does not upload your local files or MCP servers. Stopping its local relay
+does not prove remote work stopped. Read the [Cloud guide](docs/guides/cloud-sessions.md)
+before your first Cloud run.
 
-In Hermes Desktop, Devin shows up in the conversation itself. When Hermes hands off a task, its reply carries a live card for the run:
+## Quick start
 
-- Devin's plan, ticking off step by step
-- each file lighting up as Devin edits it (click one to show it in its folder)
-- the code Devin writes, as live diffs, and the output of the commands it runs
-- Devin's requests, with **Allow** and **Deny** buttons for background runs
-- recent tool calls and every permission decision
-- elapsed time, token use, the final answer or the error
-- a **Stop** button that cleans up Local processes, or requests Cloud cancellation and reports whether it was confirmed
-- a **Tell Devin…** box under a finished run: your follow-up continues the same Devin session, so Devin remembers the work, and it appears as the next card in the thread
+1. Install [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
+   and the [Devin CLI](https://cli.devin.ai). Configure Hermes' model provider.
+2. Sign in to Devin and install the community plugin:
 
-**Review changes** opens a tab with recorded edits grouped by file, including earlier edits
-to the same file. Repeated progress updates replace their own edit snapshot instead of
-adding duplicates. The view keeps up to 30 recent edits and marks omitted or truncated
-history; its line totals count edit operations, not a net Git diff.
+   ```sh
+   devin auth login
+   hermes plugins install Adolanium/hermes-devin
+   hermes plugins enable devin
+   ```
 
-A **Devin** page in the sidebar lists active runs and history, and has a **New Devin task** box that opens a chat with your request. A status-bar chip shows while Devin is working and turns into **Devin needs you** when a run is waiting for your answer. Your pet says what Devin is editing or running, and you get a notification when a run finishes or needs you, even if you've switched to another app.
+3. Restart Hermes. In Desktop, enable the Desktop half under
+   **Capabilities → Plugins → Devin**.
+4. For Local ACP, choose a supported permission mode such as `accept-edits`.
+   Current Devin builds cannot honor the default `normal` mode over ACP, so the
+   plugin refuses those runs. See [installation and first-run settings](docs/getting-started/installation.md).
+5. Run `/devin doctor` in a Hermes conversation, then ask:
 
-**New Devin task** lets you choose **Local computer** or **Devin Cloud**. Cloud exposes
-the account's available organization, repository, platform, persona and model controls,
-including Fusion when advertised. Cloud-managed permissions need a separate confirmation;
-local files and MCP servers are not uploaded. See [Cloud sessions](docs/cloud-sessions.md).
+   > Have Devin add tests for src/utils.py in /path/to/project and run them.
 
-You can also search the Local models and Fusion pairings advertised by
-your CLI session. Thinking and other model controls appear when supported. The selection
-is confirmed before the task, shown in the approval and saved with the run. These settings
-do not change Hermes' chat model or your permission mode. See [Local model controls](docs/model-controls.md).
-
-The Desktop half ships in the same folder as the plugin and starts switched off. Turn it on under **Capabilities → Plugins → Devin**.
-
-The trioexagon icon ships with the plugin and works offline. Devin Desktop is not required;
-only the standalone CLI is needed for delegation. See [third-party marks](TRADEMARKS.md).
-
-## You stay in charge
-
-The permission modes, fenced folders and process-tree guarantees below apply to Local
-execution. Cloud still requires Hermes approval to launch, but remote permissions are
-Cloud-managed. Closing the local relay does not prove Cloud work stopped; see
-[Cloud cancellation and recovery](docs/cloud-sessions.md#stop-and-reconnect).
-
-- **Every run needs your yes.** Each run passes through Hermes' approval prompt. If nobody is there to answer, the run does not start.
-- **Permission mode is your setting, not the model's.** `plan`, `normal`, `accept-edits`, `smart`, `dangerous` or `autonomous` come only from the plugin settings. `dangerous` also needs an explicit `allow_dangerous: true`. Hermes cannot pass a mode, a model or a sandbox flag per call.
-- **Devin's own questions reach you.** In a foreground run, Devin's "may I run this command?" prompts become Hermes approval prompts. Background runs started from Hermes Desktop, including the first task opened from **New Devin task**, ask on their run card with Allow and Deny buttons, and deny the request if nobody answers in time. Other background runs deny them, because nobody is waiting to answer.
-- **Fenced folders.** `allowed_roots` keeps Devin inside the directories you list.
-- **Stop includes helpers.** On Windows the run lives in a Job Object, so even a crashed Hermes takes Devin's helpers with it. On macOS and Linux it gets its own process group, and tracked descendants are stopped even if they create another group or session. See [process-tree limits](docs/process-tree.md#limits).
-- **Output is data.** Devin's reply is quoted and labelled as another agent's output when it comes back into the chat.
-
-The full model is in [Approval and permissions](docs/approval-and-permissions.md).
-
-## Make it yours
-
-### Install
-
-You need Hermes Agent and the Devin CLI, installed and logged in:
-
-```powershell
-# Windows (PowerShell)
-irm https://static.devin.ai/cli/setup.ps1 | iex
-devin auth login
-```
-
-```sh
-# macOS / Linux
-curl -fsSL https://cli.devin.ai/install.sh | bash
-devin auth login
-```
-
-Then install and enable the plugin. Its key in Hermes is `devin`:
-
-```sh
-hermes plugins install Adolanium/hermes-devin
-hermes plugins enable devin
-```
-
-Installing from GitHub uses your git credentials, so you need read access to the repository while it is private.
-
-Working from a local checkout instead? Link it into your Hermes home's `plugins/` folder as `devin`, then enable it. Use one method or the other: `hermes plugins install` refuses to replace a linked plugin.
-
-```powershell
-$h = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
-New-Item -ItemType Junction -Path "$h\plugins\devin" -Target "C:\path\to\hermes-devin"
-hermes plugins enable devin
-```
-
-Restart Hermes and check the setup from an interactive session:
-
-```text
-/devin doctor
-```
-
-The tools join the `delegation` toolset, which Hermes enables by default. Subagents never get it, so only the main agent can start Devin.
-
-### Quick config
-
-Settings live under `plugins.entries.devin.settings` in `config.yaml`. Hermes Desktop shows the same fields as a form. These are the ones most people touch:
-
-```yaml
-plugins:
-  enabled: [devin]
-  entries:
-    devin:
-      allow_gateway_injection: true    # background results in TUI, Desktop and gateway chats
-      settings:
-        permission_mode: accept-edits  # plan | normal | accept-edits | smart | dangerous | autonomous
-        allowed_roots: ["E:\\Dev"]     # Devin may only work inside these folders
-        max_concurrent_runs: 2
-        timeout_seconds: 1800          # foreground runs
-        background_timeout_seconds: 3600
-```
-
-Set `permission_mode` before your first run. The default, `normal`, never lets Devin act without asking. Current Devin builds offer no session mode like that over ACP, so the plugin refuses those runs rather than let Devin do more than you allowed. Choose `accept-edits` to let Devin edit files on its own while its other requests come to you, or keep `normal` with `backend: print`, where Devin rejects anything that needs confirmation. See [Known limitations](docs/limitations.md).
-
-Invalid settings block runs with a message that names the problem. Every option is in the [configuration reference](docs/configuration.md).
-
-### Use it
-
-Ask in plain words. Hermes picks the tool.
-
-> Have Devin fix the failing test in tests/test_api.py in E:\Dev\myapp. Wait for it.
-
-> In the background, ask Devin to migrate the test suite in E:\Dev\myapp from unittest to pytest. Tell me when it's done.
-
-> What is Devin doing right now?
-
-> Stop the Devin run.
-
-Or drive runs yourself:
-
-```text
-/devin list                 recent runs
-/devin status <run_id>      state, plan and latest events
-/devin cancel <run_id|all>  stop a run and everything it started
-/devin doctor               settings, CLI and login check
-```
-
-| Tool | What Hermes uses it for |
-| --- | --- |
-| `delegate_to_devin` | Start a run: `prompt`, plus optional `cwd`, `background`, `timeout_seconds`, `title` |
-| `devin_list_runs` | Recent runs, active or finished |
-| `devin_run_status` | State, plan, recent events and output tail of one run |
-| `devin_run_result` | Output, files changed, permission decisions, usage and errors |
-| `devin_cancel_run` | Stop a run and every process it started |
-
-## Built on what Devin already speaks
-
-Hermes Devin talks to `devin acp`, the same Agent Client Protocol Devin uses for editor integrations. That gives typed progress events, a real cancel, and permission requests the plugin can answer itself. A plain `devin -p` backend is there as a fallback. [How it works](docs/how-it-works.md) explains the choice.
-
-There is no fork, upstream patch, extra service or Python dependency. Run history is kept as small JSON files in Hermes' plugin data folder, and every change is published as a live event. See [Run data and events](docs/run-data-and-events.md).
-
-Want Devin's hosted tools in Hermes too? The [Devin MCP server](docs/devin-mcp.md) works alongside this plugin.
+Or open **Devin → New Devin task** in Desktop to choose a target and its model controls.
 
 ## Documentation
 
-- [How it works](docs/how-it-works.md): run lifecycle, ACP vs print backend
-- [Configuration reference](docs/configuration.md): every setting, its default and its limits
-- [Local model controls](docs/model-controls.md): model and Fusion selection, thinking, pricing and saved defaults
-- [Cloud sessions](docs/cloud-sessions.md): target-specific choices, remote permissions, cancellation and reconnect checks
-- [Approval and permissions](docs/approval-and-permissions.md): the approval gate and how the permission mode is enforced
-- [Process trees on Windows and POSIX](docs/process-tree.md): how runs are stopped and cleaned up
-- [Run data and events](docs/run-data-and-events.md): the run model, stored snapshots and live events for Desktop
-- [Devin MCP server](docs/devin-mcp.md): optional `mcp_servers` setup
-- [Development and testing](docs/development.md)
-- [Known limitations](docs/limitations.md)
+Detailed setup and technical references live in Markdown files under [`docs/`](docs/README.md).
 
-## License
+| Start here | |
+| --- | --- |
+| [Installation](docs/getting-started/installation.md) | CLI setup, authentication and first-run configuration |
+| [Usage](docs/getting-started/usage.md) | Desktop workflow, chat examples, commands and tools |
+| [Local model controls](docs/guides/model-controls.md) | Model search, Fusion, thinking controls and defaults |
+| [Cloud sessions](docs/guides/cloud-sessions.md) | Remote choices, permissions, Stop and reconnect checks |
+| [Configuration](docs/reference/configuration.md) | Settings, defaults and limits |
+| [Safety and limitations](docs/reference/approval-and-permissions.md) | Approval rules and links to known limitations |
+| [All documentation](docs/README.md) | Development, run data, process cleanup and optional MCP setup |
 
-[MIT](LICENSE).
+## Community, credits and license
 
-<br />
+Hermes Devin is an independent community add-on. It is not affiliated with,
+endorsed by, sponsored by or officially associated with Nous Research or Cognition.
 
-<div align="center">
-  <strong>Hermes Devin</strong><br />
-  <sub>Delegate the work. Keep the say.</sub>
-</div>
+[Hermes Agent](https://github.com/NousResearch/hermes-agent), its name and marks
+belong to **Nous Research**. [Devin](https://devin.ai), its name and trioexagon mark
+belong to **Cognition**. All rights to those products, names and marks remain
+reserved to their respective owners.
 
-<br />
+The add-on's code is [MIT licensed](LICENSE). That license does not grant rights to
+third-party products or marks. See [trademark credits and asset sources](TRADEMARKS.md).
 
-> **Community project**
->
-> Hermes Devin is an independent community plugin. It is not affiliated with, endorsed by, sponsored by, or officially associated with [Nous Research](https://github.com/NousResearch), the [Hermes Agent project](https://github.com/NousResearch/hermes-agent), or [Cognition](https://cognition.ai). Hermes, Hermes Agent, Nous Research, Devin and Cognition are names and marks belonging to their respective owners.
+Want to contribute? Start with [CONTRIBUTING.md](CONTRIBUTING.md).

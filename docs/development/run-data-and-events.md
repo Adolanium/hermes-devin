@@ -1,10 +1,12 @@
 # Run data and events
 
+[Documentation](../README.md)
+
 Cloud records add `execution_target`, the bound `cloud_permissions_ack` and
 `remote_state`. Summaries expose only a validated `cloud_url`, not raw ACP `_meta`
 or signed URLs. Unknown remote activity remains unknown after a read-only reconnect
 check. Cloud snapshots also retain the approved target-specific configuration for
-follow-ups. See [Cloud sessions](cloud-sessions.md).
+follow-ups. See [Cloud sessions](../guides/cloud-sessions.md).
 
 Every run is written to disk and published live. The Desktop half (`desktop/plugin.js`) is built on both, and anything else can use them too.
 
